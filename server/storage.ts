@@ -85,92 +85,257 @@ export class MemStorage implements IStorage {
     const contextLower = context.toLowerCase();
     let relevantSongs: Song[] = [];
     
-    // Map context keywords to moods or genres
-    const contextMappings: { [key: string]: { genres?: string[], moods?: string[] } } = {
-      'run': { genres: ['electronic', 'pop', 'rock'], moods: ['energetic', 'upbeat'] },
-      'jog': { genres: ['electronic', 'pop', 'rock'], moods: ['energetic', 'upbeat'] },
-      'workout': { genres: ['electronic', 'hip hop', 'rock'], moods: ['energetic', 'intense'] },
-      'gym': { genres: ['electronic', 'hip hop', 'rock'], moods: ['energetic', 'intense'] },
-      'study': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'] },
-      'focus': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'] },
-      'work': { genres: ['classical', 'ambient', 'jazz'], moods: ['calm', 'focused'] },
-      'relax': { genres: ['ambient', 'acoustic', 'jazz'], moods: ['calm', 'relaxed'] },
-      'chill': { genres: ['ambient', 'acoustic', 'r&b'], moods: ['calm', 'relaxed'] },
-      'sleep': { genres: ['ambient', 'classical'], moods: ['calm', 'relaxed'] },
-      'party': { genres: ['pop', 'hip hop', 'dance'], moods: ['energetic', 'upbeat'] },
-      'dance': { genres: ['electronic', 'pop', 'hip hop'], moods: ['energetic', 'upbeat'] },
-      'romantic': { genres: ['r&b', 'jazz', 'acoustic'], moods: ['relaxed', 'emotional'] },
-      'dinner': { genres: ['jazz', 'acoustic', 'classical'], moods: ['relaxed', 'sophisticated'] },
-      'drive': { genres: ['rock', 'pop', 'country'], moods: ['energetic', 'relaxed'] },
-      'car': { genres: ['rock', 'pop', 'country'], moods: ['energetic', 'relaxed'] },
-      'sad': { genres: ['acoustic', 'indie', 'alternative'], moods: ['emotional', 'sad'] },
-      'happy': { genres: ['pop', 'funk', 'dance'], moods: ['upbeat', 'energetic'] }
+    // Enhanced context mappings with more specific genres and moods
+    const contextMappings: { [key: string]: { genres?: string[], moods?: string[], weight: number } } = {
+      // Activity-based contexts
+      'run': { genres: ['electronic', 'pop', 'rock'], moods: ['energetic', 'upbeat'], weight: 10 },
+      'jog': { genres: ['electronic', 'pop', 'rock'], moods: ['energetic', 'upbeat'], weight: 10 },
+      'workout': { genres: ['electronic', 'hip hop', 'rock'], moods: ['energetic', 'intense'], weight: 10 },
+      'gym': { genres: ['electronic', 'hip hop', 'rock'], moods: ['energetic', 'intense'], weight: 10 },
+      'fitness': { genres: ['electronic', 'hip hop', 'rock'], moods: ['energetic', 'intense'], weight: 10 },
+      'exercise': { genres: ['electronic', 'pop', 'rock'], moods: ['energetic', 'upbeat'], weight: 10 },
+      
+      // Focus contexts
+      'study': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 10 },
+      'focus': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 10 },
+      'work': { genres: ['classical', 'ambient', 'jazz'], moods: ['calm', 'focused'], weight: 10 },
+      'concentrate': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 10 },
+      'reading': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 8 },
+      
+      // Relaxation contexts
+      'relax': { genres: ['ambient', 'acoustic', 'jazz'], moods: ['calm', 'relaxed'], weight: 10 },
+      'chill': { genres: ['ambient', 'acoustic', 'r&b'], moods: ['calm', 'relaxed'], weight: 10 },
+      'unwind': { genres: ['ambient', 'acoustic', 'jazz'], moods: ['calm', 'relaxed'], weight: 8 },
+      'sleep': { genres: ['ambient', 'classical'], moods: ['calm', 'relaxed'], weight: 10 },
+      'rest': { genres: ['ambient', 'classical'], moods: ['calm', 'relaxed'], weight: 8 },
+      'meditate': { genres: ['ambient'], moods: ['calm'], weight: 10 },
+      
+      // Social contexts
+      'party': { genres: ['pop', 'hip hop', 'dance'], moods: ['energetic', 'upbeat'], weight: 10 },
+      'dance': { genres: ['electronic', 'pop', 'hip hop'], moods: ['energetic', 'upbeat'], weight: 10 },
+      'celebration': { genres: ['pop', 'dance'], moods: ['upbeat', 'happy'], weight: 8 },
+      'gathering': { genres: ['pop', 'rock'], moods: ['upbeat'], weight: 7 },
+      'friends': { genres: ['pop', 'hip hop', 'rock'], moods: ['upbeat'], weight: 8 },
+      
+      // Romantic contexts
+      'romantic': { genres: ['r&b', 'jazz', 'acoustic'], moods: ['relaxed', 'emotional', 'romantic'], weight: 10 },
+      'date': { genres: ['r&b', 'jazz', 'acoustic'], moods: ['relaxed', 'romantic'], weight: 9 },
+      'dinner': { genres: ['jazz', 'acoustic', 'classical'], moods: ['relaxed', 'sophisticated'], weight: 10 },
+      'love': { genres: ['r&b', 'pop', 'acoustic'], moods: ['emotional', 'romantic'], weight: 10 },
+      'evening': { genres: ['jazz', 'r&b', 'acoustic'], moods: ['relaxed'], weight: 7 },
+      
+      // Travel contexts
+      'drive': { genres: ['rock', 'pop', 'country'], moods: ['energetic', 'relaxed'], weight: 10 },
+      'car': { genres: ['rock', 'pop', 'country'], moods: ['energetic', 'relaxed'], weight: 10 },
+      'road': { genres: ['rock', 'country', 'alternative'], moods: ['energetic'], weight: 9 },
+      'trip': { genres: ['pop', 'rock', 'alternative'], moods: ['upbeat'], weight: 8 },
+      'travel': { genres: ['pop', 'rock'], moods: ['upbeat', 'energetic'], weight: 8 },
+      
+      // Emotional contexts
+      'sad': { genres: ['acoustic', 'indie', 'alternative'], moods: ['emotional', 'sad'], weight: 10 },
+      'happy': { genres: ['pop', 'funk', 'dance'], moods: ['upbeat', 'happy'], weight: 10 },
+      'angry': { genres: ['rock', 'metal'], moods: ['intense'], weight: 10 },
+      'emotional': { genres: ['indie', 'acoustic', 'alternative'], moods: ['emotional'], weight: 10 },
+      'reflective': { genres: ['acoustic', 'indie', 'classical'], moods: ['calm', 'emotional'], weight: 9 },
+      
+      // Time-based contexts
+      'morning': { genres: ['pop', 'acoustic'], moods: ['upbeat', 'energetic'], weight: 7 },
+      'afternoon': { genres: ['pop', 'rock'], moods: ['relaxed', 'upbeat'], weight: 6 },
+      'night': { genres: ['electronic', 'r&b'], moods: ['energetic', 'relaxed'], weight: 7 },
+      'weekend': { genres: ['pop', 'dance'], moods: ['upbeat'], weight: 6 }
     };
 
-    // Find matching contexts
-    let matchedGenres: Set<string> = new Set();
-    let matchedMoods: Set<string> = new Set();
+    // Store context matches with their weights
+    let contextMatches: { genre: string, mood: string, weight: number }[] = [];
 
+    // Find matching contexts with weighted importance
     Object.keys(contextMappings).forEach(keyword => {
       if (contextLower.includes(keyword)) {
         const mapping = contextMappings[keyword];
+        const weight = mapping.weight;
+        
+        // For each matching context keyword, add its genres and moods with weight
         if (mapping.genres) {
-          mapping.genres.forEach(genre => matchedGenres.add(genre));
-        }
-        if (mapping.moods) {
-          mapping.moods.forEach(mood => matchedMoods.add(mood));
+          mapping.genres.forEach(genre => {
+            mapping.moods?.forEach(mood => {
+              contextMatches.push({ genre, mood, weight });
+            });
+          });
         }
       }
     });
 
     // If we found matches, get songs that match the genres or moods
-    if (matchedGenres.size > 0 || matchedMoods.size > 0) {
-      const genreArray = Array.from(matchedGenres);
-      const moodArray = Array.from(matchedMoods);
-      
-      relevantSongs = Array.from(this.songs.values()).filter(song => {
-        const hasMatchingGenre = song.genre && genreArray.some(genre => 
-          song.genre!.includes(genre)
-        );
-        const hasMatchingMood = song.mood && moodArray.some(mood => 
-          song.mood!.includes(mood)
-        );
-        return hasMatchingGenre || hasMatchingMood;
+    if (contextMatches.length > 0) {
+      // Group by genre-mood combinations and sum weights
+      const weightedCombinations = new Map<string, number>();
+      contextMatches.forEach(match => {
+        const key = `${match.genre}-${match.mood}`;
+        const currentWeight = weightedCombinations.get(key) || 0;
+        weightedCombinations.set(key, currentWeight + match.weight);
       });
+      
+      // Convert to array and sort by weight (descending)
+      const sortedCombinations = Array.from(weightedCombinations.entries())
+        .map(([key, weight]) => {
+          const [genre, mood] = key.split('-');
+          return { genre, mood, weight };
+        })
+        .sort((a, b) => b.weight - a.weight);
+      
+      // Get songs that match top combinations
+      const songScores = new Map<number, number>();
+      
+      // Score each song based on how well it matches the context
+      Array.from(this.songs.values()).forEach(song => {
+        let score = 0;
+        
+        sortedCombinations.forEach(combination => {
+          const genreMatch = song.genre?.includes(combination.genre) || false;
+          const moodMatch = song.mood?.includes(combination.mood) || false;
+          
+          // Higher score for exact matches
+          if (genreMatch && moodMatch) {
+            score += combination.weight * 2;
+          } 
+          // Lower score for partial matches
+          else if (genreMatch || moodMatch) {
+            score += combination.weight;
+          }
+        });
+        
+        if (score > 0) {
+          songScores.set(song.id, score);
+        }
+      });
+      
+      // Convert to array and sort by score (descending)
+      const scoredSongs = Array.from(songScores.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([id]) => this.songs.get(id)!)
+        .filter(Boolean);
+      
+      // Take the top scoring songs
+      relevantSongs = scoredSongs.slice(0, 30); // Get more than needed for variety
     }
 
-    // If we didn't find enough songs, just return a random selection
+    // Ensure we have enough songs
     if (relevantSongs.length < 20) {
-      const allSongs = Array.from(this.songs.values());
-      // Shuffle all songs
-      const shuffled = [...allSongs].sort(() => 0.5 - Math.random());
-      // Add enough unique songs to reach 20
+      console.log(`Not enough context-relevant songs found (${relevantSongs.length}), adding random songs`);
+      
+      // Get songs not already in the list
+      const existingIds = new Set(relevantSongs.map(song => song.id));
+      const remainingSongs = Array.from(this.songs.values())
+        .filter(song => !existingIds.has(song.id));
+      
+      // Shuffle remaining songs
+      const shuffled = [...remainingSongs].sort(() => 0.5 - Math.random());
+      
+      // Add enough unique songs to reach at least 20
       while (relevantSongs.length < 20 && shuffled.length > 0) {
         const nextSong = shuffled.pop();
-        if (nextSong && !relevantSongs.some(s => s.id === nextSong.id)) {
+        if (nextSong) {
           relevantSongs.push(nextSong);
         }
       }
     }
     
-    return relevantSongs;
+    // Shuffle the songs for variety
+    return relevantSongs.sort(() => 0.5 - Math.random());
   }
 
   private getSimilarSongs(suggestionArtists: string[], existingSongIds: Set<number>): Song[] {
-    // Get songs by the same artists
-    let similarSongs = Array.from(this.songs.values()).filter(song => 
+    // First, get songs by the exact same artists
+    let artistSongs = Array.from(this.songs.values()).filter(song => 
       !existingSongIds.has(song.id) && 
       suggestionArtists.some(artist => 
         song.artist.toLowerCase().includes(artist.toLowerCase())
       )
     );
     
-    // Add some random songs if we don't have enough
-    if (similarSongs.length < 5) {
+    // Score all songs by genre/mood similarity to originals
+    // This helps find songs that "sound like" the suggested artists' styles
+    
+    // 1. First, collect genres and moods from all songs by the suggested artists
+    const artistGenres = new Set<string>();
+    const artistMoods = new Set<string>();
+    
+    Array.from(this.songs.values()).forEach(song => {
+      if (suggestionArtists.some(artist => 
+          song.artist.toLowerCase().includes(artist.toLowerCase()))) {
+        song.genre?.forEach(g => artistGenres.add(g));
+        song.mood?.forEach(m => artistMoods.add(m));
+      }
+    });
+    
+    // Convert sets to arrays
+    const targetGenres = Array.from(artistGenres);
+    const targetMoods = Array.from(artistMoods);
+    
+    // Score all songs based on genre/mood overlap with suggested artists
+    if (targetGenres.length > 0 || targetMoods.length > 0) {
+      const scoredSongs = Array.from(this.songs.values())
+        .filter(song => !existingSongIds.has(song.id) && !artistSongs.some(s => s.id === song.id))
+        .map(song => {
+          // Calculate genre overlap
+          const genreOverlap = song.genre ? 
+            song.genre.filter(g => targetGenres.includes(g)).length / 
+            Math.max(targetGenres.length, 1) : 0;
+            
+          // Calculate mood overlap
+          const moodOverlap = song.mood ? 
+            song.mood.filter(m => targetMoods.includes(m)).length / 
+            Math.max(targetMoods.length, 1) : 0;
+            
+          // Combine scores (double weight for genre)
+          const score = (genreOverlap * 2 + moodOverlap) / 3;
+          
+          return { song, score };
+        })
+        .filter(item => item.score > 0)  // Only include songs with some similarity
+        .sort((a, b) => b.score - a.score);  // Sort by score descending
+      
+      // Add the top similar songs by genre/mood
+      const genreSimilarSongs = scoredSongs.slice(0, 10).map(item => item.song);
+      
+      // Combine artist songs and genre-similar songs
+      let similarSongs = [...artistSongs];
+      
+      for (const song of genreSimilarSongs) {
+        if (!similarSongs.some(s => s.id === song.id)) {
+          similarSongs.push(song);
+        }
+      }
+      
+      // If we have enough similar songs, return them
+      if (similarSongs.length >= 10) {
+        return similarSongs;
+      }
+      
+      // Otherwise, continue to add random songs
       const allSongs = Array.from(this.songs.values());
       const shuffled = [...allSongs].sort(() => 0.5 - Math.random());
       
-      while (similarSongs.length < 5 && shuffled.length > 0) {
+      while (similarSongs.length < 10 && shuffled.length > 0) {
+        const nextSong = shuffled.pop();
+        if (nextSong && !existingSongIds.has(nextSong.id) && 
+            !similarSongs.some(s => s.id === nextSong.id)) {
+          similarSongs.push(nextSong);
+        }
+      }
+      
+      return similarSongs;
+    }
+    
+    // If we couldn't find genres/moods, just return artist songs + random
+    let similarSongs = [...artistSongs];
+    
+    // Add some random songs if we don't have enough
+    if (similarSongs.length < 10) {
+      const allSongs = Array.from(this.songs.values());
+      const shuffled = [...allSongs].sort(() => 0.5 - Math.random());
+      
+      while (similarSongs.length < 10 && shuffled.length > 0) {
         const nextSong = shuffled.pop();
         if (nextSong && !existingSongIds.has(nextSong.id) && 
             !similarSongs.some(s => s.id === nextSong.id)) {
@@ -247,6 +412,7 @@ export class MemStorage implements IStorage {
           id, 
           title, 
           artist, 
+          album: null,
           duration,
           genre: [],
           mood: []
