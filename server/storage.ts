@@ -423,7 +423,7 @@ export class MemStorage implements IStorage {
       suggestedSongs.push(matchedSong);
     }
     
-    // 2. Get songs based on context
+    // 2. Get songs based on context - this is now our primary source after user suggestions
     const contextSongs = this.getRelevantSongsByContext(context);
     
     // 3. Create a set of existing song IDs to avoid duplicates
@@ -433,31 +433,53 @@ export class MemStorage implements IStorage {
     const suggestionArtists = suggestions.map(s => s.artist);
     const similarSongs = this.getSimilarSongs(suggestionArtists, existingSongIds);
     
-    // 5. Fill remaining slots with context songs, avoiding duplicates
+    // 5. Begin with suggested songs
     const playlistSongs: Song[] = [...suggestedSongs];
     
-    // Add similar songs
-    for (const song of similarSongs) {
-      if (playlistSongs.length >= 20) break;
-      if (!existingSongIds.has(song.id)) {
-        playlistSongs.push(song);
-        existingSongIds.add(song.id);
-      }
-    }
+    // 6. Prioritize context-relevant songs
+    // We'll use a higher ratio of context songs (60-70%) for better context matching
+    const maxContextSongs = 14; // 70% of a 20-song playlist after user suggestions
+    const maxSimilarSongs = 20 - maxContextSongs - playlistSongs.length;
     
-    // Add context songs
+    // Add context songs first (prioritizing context over artist similarity)
+    let contextSongsAdded = 0;
     for (const song of contextSongs) {
-      if (playlistSongs.length >= 20) break;
+      if (contextSongsAdded >= maxContextSongs || playlistSongs.length >= 20) break;
       if (!existingSongIds.has(song.id)) {
         playlistSongs.push(song);
         existingSongIds.add(song.id);
+        contextSongsAdded++;
       }
     }
     
-    // 6. Arrange songs in a pleasing musical order
+    // Add similar songs to fill remaining slots
+    let similarSongsAdded = 0;
+    for (const song of similarSongs) {
+      if (similarSongsAdded >= maxSimilarSongs || playlistSongs.length >= 20) break;
+      if (!existingSongIds.has(song.id)) {
+        playlistSongs.push(song);
+        existingSongIds.add(song.id);
+        similarSongsAdded++;
+      }
+    }
+    
+    // If we still need more songs, add more context songs
+    if (playlistSongs.length < 20) {
+      // Get more context songs from later in the list
+      for (let i = contextSongsAdded; i < contextSongs.length; i++) {
+        if (playlistSongs.length >= 20) break;
+        const song = contextSongs[i];
+        if (!existingSongIds.has(song.id)) {
+          playlistSongs.push(song);
+          existingSongIds.add(song.id);
+        }
+      }
+    }
+    
+    // 7. Arrange songs in a pleasing musical order
     const orderedSongs = this.arrangeInMusicalOrder(playlistSongs);
     
-    // 7. Create response object
+    // 8. Create response object
     const playlistName = generatePlaylistName(context);
     
     return {
@@ -466,7 +488,7 @@ export class MemStorage implements IStorage {
         id: song.id,
         title: song.title,
         artist: song.artist,
-        album: song.album,
+        album: song.album || undefined, // Convert null to undefined to match response type
         duration: song.duration
       }))
     };
