@@ -96,11 +96,15 @@ export class MemStorage implements IStorage {
       'exercise': { genres: ['electronic', 'pop', 'rock'], moods: ['energetic', 'upbeat'], weight: 10 },
       
       // Focus contexts
-      'study': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 10 },
-      'focus': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 10 },
+      'study': { genres: ['classical', 'ambient', 'instrumental', 'piano'], moods: ['calm', 'focused'], weight: 10 },
+      'studying': { genres: ['classical', 'ambient', 'instrumental', 'piano'], moods: ['calm', 'focused'], weight: 10 },
+      'session': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 8 },
+      'focus': { genres: ['classical', 'ambient', 'instrumental', 'piano'], moods: ['calm', 'focused'], weight: 10 },
       'work': { genres: ['classical', 'ambient', 'jazz'], moods: ['calm', 'focused'], weight: 10 },
       'concentrate': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 10 },
+      'concentration': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 10 },  
       'reading': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 8 },
+      'homework': { genres: ['classical', 'ambient', 'instrumental'], moods: ['calm', 'focused'], weight: 9 },
       
       // Relaxation contexts
       'relax': { genres: ['ambient', 'acoustic', 'jazz'], moods: ['calm', 'relaxed'], weight: 10 },
@@ -164,6 +168,34 @@ export class MemStorage implements IStorage {
         }
       }
     });
+    
+    // Special handling for common phrases that might not directly match single keywords
+    if (contextLower.includes("study session") || 
+        (contextLower.includes("study") && contextLower.includes("session"))) {
+      // Add extra weight for study sessions with classical/instrumental music
+      const studyGenres = ['classical', 'instrumental', 'piano', 'ambient'];
+      const studyMoods = ['calm', 'focused', 'background'];
+      
+      studyGenres.forEach(genre => {
+        studyMoods.forEach(mood => {
+          // Add with high weight (12) to prioritize these matches
+          contextMatches.push({ genre, mood, weight: 12 });
+        });
+      });
+    }
+    
+    // Handle other multi-word contexts that need special emphasis
+    if (contextLower.includes("romantic dinner") || 
+        (contextLower.includes("romantic") && contextLower.includes("dinner"))) {
+      const genres = ['jazz', 'classical', 'acoustic'];
+      const moods = ['romantic', 'relaxed', 'sophisticated'];
+      
+      genres.forEach(genre => {
+        moods.forEach(mood => {
+          contextMatches.push({ genre, mood, weight: 12 });
+        });
+      });
+    }
 
     // If we found matches, get songs that match the genres or moods
     if (contextMatches.length > 0) {
@@ -203,6 +235,35 @@ export class MemStorage implements IStorage {
             score += combination.weight;
           }
         });
+        
+        // Add artist-specific bonuses for certain contexts
+        if (contextLower.includes("study") || contextLower.includes("focus") || 
+            contextLower.includes("concentration")) {
+          // Classical and instrumental artists good for studying
+          const studyArtists = ['beethoven', 'debussy', 'mozart', 'bach', 'yiruma', 'einaudi'];
+          if (studyArtists.some(a => song.artist.toLowerCase().includes(a))) {
+            score += 20; // High bonus to prioritize these artists
+          }
+        }
+        
+        if (contextLower.includes("workout") || contextLower.includes("run") || contextLower.includes("gym")) {
+          // High energy artists good for workouts
+          const workoutArtists = ['ac/dc', 'eminem', 'daft punk', 'survivor', 
+                                 'black eyed peas', 'swedish house mafia'];
+          if (workoutArtists.some(a => song.artist.toLowerCase().includes(a))) {
+            score += 20;
+          }
+        }
+        
+        if (contextLower.includes("romantic") || contextLower.includes("dinner") || 
+           contextLower.includes("date")) {
+          // Artists good for romantic settings
+          const romanticArtists = ['frank sinatra', 'john legend', 'adele', 'nina simone', 
+                                  'ed sheeran', 'ray charles'];
+          if (romanticArtists.some(a => song.artist.toLowerCase().includes(a))) {
+            score += 20;
+          }
+        }
         
         if (score > 0) {
           songScores.set(song.id, score);
