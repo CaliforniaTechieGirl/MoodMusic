@@ -7,7 +7,7 @@ import { SiSpotify } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 
 export default function PlaylistResultStep() {
-  const { playlistContext, playlistTracks, removeTrack, playlistName, setPlaylistName, playlistWarnings, startOver } = usePlaylist();
+  const { playlistContext, playlistTracks, removeTrack, playlistName, setPlaylistName, playlistWarnings, setCurrentStep, startOver } = usePlaylist();
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
   const { toast } = useToast();
@@ -309,12 +309,12 @@ export default function PlaylistResultStep() {
 
       <div className="px-6 pb-6">
         <div className="flex flex-col space-y-4">
-          {/* Start Over button */}
+          {/* Edit Prompts button — returns to step 2 with data intact */}
           <Button 
-            onClick={startOver}
+            onClick={() => setCurrentStep(2)}
             className="w-full md:w-auto bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-full font-medium transition duration-200 h-auto"
           >
-            Start Over
+            Edit Prompts
           </Button>
           
           {/* Export buttons */}

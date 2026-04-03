@@ -12,8 +12,11 @@ export default function SuggestionsStep() {
     updateSongSuggestion,
     setCurrentStep,
     generatePlaylist,
-    isGenerating
+    isGenerating,
+    startOver
   } = usePlaylist();
+
+  const isPrePopulated = songSuggestions.some(s => s.title.trim() !== '' || s.artist.trim() !== '');
   
   const [errors, setErrors] = useState<{[key: number]: string}>({});
 
@@ -97,13 +100,24 @@ export default function SuggestionsStep() {
         </div>
       )}
       
-      <div className="flex justify-between">
-        <Button
-          onClick={handleBack}
-          className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-full font-medium transition duration-200 h-auto"
-        >
-          Back
-        </Button>
+      <div className="flex justify-between items-center">
+        <div className="flex gap-3">
+          <Button
+            onClick={handleBack}
+            className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-full font-medium transition duration-200 h-auto"
+          >
+            Back
+          </Button>
+          {isPrePopulated && (
+            <Button
+              onClick={startOver}
+              variant="ghost"
+              className="text-[#B3B3B3] hover:text-white px-4 py-3 rounded-full font-medium transition duration-200 h-auto"
+            >
+              Start Over
+            </Button>
+          )}
+        </div>
         <Button
           onClick={handleCreatePlaylist}
           disabled={isGenerating}

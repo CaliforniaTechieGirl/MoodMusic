@@ -336,8 +336,8 @@ export async function generateLastFmPlaylist(
 
     console.log(`[Last.fm] Tag filter counts — both: ${countBoth}, nat-only: ${countNat}, decade-only: ${countDec}`);
 
-    if (countBoth >= 10) {
-      // Ideal case: enough tracks pass all constraints
+    if (countBoth >= 30) {
+      // Enough tracks pass all constraints to fill a playlist after per-artist capping
       for (const [key, track] of candidateMap.entries()) {
         if (!artistPasses(track, hasDecade, hasNat)) candidateMap.delete(key);
       }
