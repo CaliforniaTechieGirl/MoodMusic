@@ -369,7 +369,7 @@ export default function PlaylistResultStep() {
                   {isExporting ? "Connecting to Spotify…" : "Export to Spotify"}
                 </Button>
                 <p className="text-[10px] text-[#B3B3B3] text-center leading-tight px-1">
-                  Direct export is limited to pre-authorized accounts — Spotify's API restricts developer apps to a small whitelist. Use <span className="text-white">Download</span> to save a track list and add songs manually.
+                  Direct export is limited to preauthorized accounts.
                 </p>
               </div>
             )}
