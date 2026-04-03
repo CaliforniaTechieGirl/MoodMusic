@@ -331,6 +331,19 @@ export async function generateLastFmPlaylist(
     nationalityTagsInContext.flatMap((n) => [n, ...(NATIONALITY_GENRE_COMBOS[n] || [])])
   );
 
+  // Build competing-decade tags: any decade that is NOT the requested one.
+  // Artists tagged with these (e.g. Great Big Sea tagged "90s" when we want "60s")
+  // get a score penalty so they rank below era-appropriate artists.
+  const competingDecadeRejected = new Set<string>();
+  if (decadeTagsInContext.length > 0) {
+    for (const d of DECADE_TAGS) {
+      if (!decadeTagsInContext.includes(d)) {
+        competingDecadeRejected.add(d);
+        for (const alias of (DECADE_ALIASES[d] || [])) competingDecadeRejected.add(alias);
+      }
+    }
+  }
+
   // Fetch artist.getTopTags for every unique artist in the similar pool (in parallel)
   const uniqueArtists = [...new Set(Array.from(candidateMap.values()).map((t) => t.artist))];
   const artistTagMap = new Map<string, Set<string>>();
@@ -357,11 +370,15 @@ export async function generateLastFmPlaylist(
 
     const matchesDecade = decadeAccepted.size === 0 || [...decadeAccepted].some((t) => artistTags.has(t));
     const matchesNat    = natAccepted.size === 0    || [...natAccepted].some((t) => artistTags.has(t));
+    const matchesCompetingDecade = competingDecadeRejected.size > 0 &&
+      [...competingDecadeRejected].some((t) => artistTags.has(t));
     const genreScore    = genreMoodTags.filter((t) => artistTags.has(t)).length * 0.4;
 
     // Nationality weighted 2× decade — being from the right country is the stronger constraint
     if (matchesDecade) { track.tagScore += 1.0; track.decadeTagScore += 1.0; }
     if (matchesNat)    { track.tagScore += 2.0; track.nationalityTagScore += 2.0; }
+    // Penalize artists explicitly tagged with a different era (e.g. Great Big Sea tagged "90s" in a 60s query)
+    if (matchesCompetingDecade) { track.tagScore -= 1.5; }
     track.tagScore += genreScore;
   }
 

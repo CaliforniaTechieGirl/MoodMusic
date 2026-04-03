@@ -455,10 +455,24 @@ export class MemStorage implements IStorage {
         const { tracks: lastFmTracks, warnings } = await generateLastFmPlaylist(suggestions, context);
 
         if (lastFmTracks.length >= 5) {
+          // Build a correction map: original key → corrected {title, artist}
+          // so that auto-corrected seeds show the right name and get a real duration.
+          const correctionMap = new Map<string, { title: string; artist: string }>();
+          for (const w of warnings) {
+            if (w.suggestion && w.message.startsWith('We used')) {
+              const key = `${w.inputArtist.toLowerCase()}|||${w.inputTitle.toLowerCase()}`;
+              correctionMap.set(key, w.suggestion);
+            }
+          }
+          const effectiveSuggestions = suggestions.map((s) => {
+            const key = `${s.artist.toLowerCase()}|||${s.title.toLowerCase()}`;
+            return correctionMap.get(key) ?? s;
+          });
+
           const suggestionDurations = await Promise.all(
-            suggestions.map((s) => getTrackDuration(s.artist, s.title))
+            effectiveSuggestions.map((s) => getTrackDuration(s.artist, s.title))
           );
-          const suggestionTracks = suggestions.map((s, i) => ({
+          const suggestionTracks = effectiveSuggestions.map((s, i) => ({
             id: -(i + 1),
             title: s.title,
             artist: s.artist,
@@ -474,8 +488,9 @@ export class MemStorage implements IStorage {
           }
 
           // Deduplicate + apply global 2-per-artist cap (counting suggestions)
+          // Use effective (corrected) keys so we don't double-add corrected songs
           const suggestionKeys = new Set(
-            suggestions.map((s) => `${s.artist.toLowerCase()}|||${s.title.toLowerCase()}`)
+            effectiveSuggestions.map((s) => `${s.artist.toLowerCase()}|||${s.title.toLowerCase()}`)
           );
           const filteredLastFm: typeof lastFmTracks = [];
           for (const t of lastFmTracks) {
