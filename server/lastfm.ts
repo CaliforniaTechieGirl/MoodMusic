@@ -25,7 +25,12 @@ export interface LastFmTrackResult {
   url: string;
   matchScore: number;
   tagScore: number;
+  decadeTagScore: number;
+  nationalityTagScore: number;
 }
+
+const DECADE_TAGS = ['80s', '70s', '90s', '60s', '2000s', '2010s'];
+const NATIONALITY_TAGS = ['canadian', 'british', 'australian', 'american', 'french', 'irish', 'swedish'];
 
 export function parseContextToTags(context: string): string[] {
   const lower = context.toLowerCase();
@@ -143,6 +148,8 @@ export async function generateLastFmPlaylist(
               url: track.url || '',
               matchScore,
               tagScore: 0,
+              decadeTagScore: 0,
+              nationalityTagScore: 0,
             });
           } else {
             // Track appears for multiple suggestions — boost it
@@ -161,68 +168,139 @@ export async function generateLastFmPlaylist(
 
   console.log(`[Last.fm] Total candidates after similar-track lookup: ${candidateMap.size}`);
 
-  // Step 2: Score candidates against context tags using tag.getTopTracks
-  if (contextTags.length > 0) {
-    const specificTags = contextTags.filter((t) =>
-      ['80s', '70s', '90s', '60s', '2000s', '2010s',
-       'canadian', 'british', 'australian', 'american', 'french', 'irish', 'swedish'].includes(t)
-    );
-    const genericTags = contextTags.filter((t) => !specificTags.includes(t));
+  // Step 2a: Process decade tags — these are MANDATORY filters.
+  // We fetch their top tracks, add them as candidates, then hard-filter the pool.
+  const decadeTagsInContext = contextTags.filter((t) => DECADE_TAGS.includes(t));
+  const nationalityTagsInContext = contextTags.filter((t) => NATIONALITY_TAGS.includes(t));
+  const genreMoodTags = contextTags.filter(
+    (t) => !DECADE_TAGS.includes(t) && !NATIONALITY_TAGS.includes(t)
+  );
 
-    // Fetch specific tags first (nationality/decade), then genre/mood — cap at 8 total API calls
-    const tagsToFetch = [...specificTags, ...genericTags].slice(0, 8);
+  const decadeKeySet = new Set<string>();
+  const nationalityKeySet = new Set<string>();
 
-    await Promise.all(
-      tagsToFetch.map(async (tag) => {
-        try {
-          const data = await apiCall({
-            method: 'tag.getTopTracks',
-            tag,
-            limit: '200',
+  // Fetch decade tag tracks sequentially (order matters — we mutate the map)
+  for (const decadeTag of decadeTagsInContext) {
+    try {
+      const data = await apiCall({ method: 'tag.getTopTracks', tag: decadeTag, limit: '200' });
+      const tagTracks: any[] = data?.tracks?.track || [];
+
+      for (const tagTrack of tagTracks) {
+        const artistName =
+          typeof tagTrack.artist === 'string' ? tagTrack.artist : tagTrack.artist?.name || '';
+        const key = `${artistName.toLowerCase()}|||${tagTrack.name.toLowerCase()}`;
+        decadeKeySet.add(key);
+
+        if (candidateMap.has(key)) {
+          candidateMap.get(key)!.tagScore += 0.5;
+          candidateMap.get(key)!.decadeTagScore += 0.5;
+        } else {
+          // Add decade tracks as candidates even if not in the similar-tracks pool
+          candidateMap.set(key, {
+            title: tagTrack.name,
+            artist: artistName,
+            duration: typeof tagTrack.duration === 'number' ? tagTrack.duration : 0,
+            url: tagTrack.url || '',
+            matchScore: 0,
+            tagScore: 0.5,
+            decadeTagScore: 0.5,
+            nationalityTagScore: 0,
           });
-
-          const tagTracks: any[] = data?.tracks?.track || [];
-          const isSpecific = specificTags.includes(tag);
-          const boost = isSpecific ? 0.5 : 0.2;
-
-          for (const tagTrack of tagTracks) {
-            const artistName =
-              typeof tagTrack.artist === 'string' ? tagTrack.artist : tagTrack.artist?.name || '';
-            const key = `${artistName.toLowerCase()}|||${tagTrack.name.toLowerCase()}`;
-
-            if (candidateMap.has(key)) {
-              candidateMap.get(key)!.tagScore += boost;
-            }
-          }
-
-          console.log(
-            `[Last.fm] Tag "${tag}" returned ${tagTracks.length} tracks (boost: ${boost})`
-          );
-        } catch (err) {
-          console.error(`[Last.fm] Failed to get top tracks for tag "${tag}":`, err);
         }
-      })
-    );
+      }
+
+      console.log(`[Last.fm] Decade tag "${decadeTag}": ${tagTracks.length} tracks added/boosted`);
+    } catch (err) {
+      console.error(`[Last.fm] Failed to get top tracks for decade tag "${decadeTag}":`, err);
+    }
   }
+
+  // Hard-filter: if a decade was specified, remove any candidate NOT confirmed in that decade
+  if (decadeTagsInContext.length > 0) {
+    let removed = 0;
+    for (const key of candidateMap.keys()) {
+      if (!decadeKeySet.has(key)) {
+        candidateMap.delete(key);
+        removed++;
+      }
+    }
+    console.log(`[Last.fm] Decade hard-filter removed ${removed} non-decade tracks. Remaining: ${candidateMap.size}`);
+  }
+
+  // Step 2b: Process nationality tags — also mandatory filters (same logic)
+  for (const natTag of nationalityTagsInContext) {
+    try {
+      const data = await apiCall({ method: 'tag.getTopTracks', tag: natTag, limit: '200' });
+      const tagTracks: any[] = data?.tracks?.track || [];
+
+      for (const tagTrack of tagTracks) {
+        const artistName =
+          typeof tagTrack.artist === 'string' ? tagTrack.artist : tagTrack.artist?.name || '';
+        const key = `${artistName.toLowerCase()}|||${tagTrack.name.toLowerCase()}`;
+        nationalityKeySet.add(key);
+
+        if (candidateMap.has(key)) {
+          candidateMap.get(key)!.tagScore += 0.5;
+          candidateMap.get(key)!.nationalityTagScore += 0.5;
+        }
+      }
+
+      console.log(`[Last.fm] Nationality tag "${natTag}": ${tagTracks.length} tracks boosted`);
+    } catch (err) {
+      console.error(`[Last.fm] Failed to get top tracks for nationality tag "${natTag}":`, err);
+    }
+  }
+
+  // Hard-filter: if nationality was specified and we have enough matches, keep only those
+  if (nationalityTagsInContext.length > 0 && nationalityKeySet.size > 0) {
+    const natMatched = Array.from(candidateMap.keys()).filter((k) => nationalityKeySet.has(k));
+    if (natMatched.length >= 15) {
+      let removed = 0;
+      for (const key of candidateMap.keys()) {
+        if (!nationalityKeySet.has(key)) {
+          candidateMap.delete(key);
+          removed++;
+        }
+      }
+      console.log(`[Last.fm] Nationality hard-filter removed ${removed} tracks. Remaining: ${candidateMap.size}`);
+    }
+  }
+
+  // Step 2c: Genre/mood tags — soft boosts only (no filtering)
+  await Promise.all(
+    genreMoodTags.slice(0, 6).map(async (tag) => {
+      try {
+        const data = await apiCall({ method: 'tag.getTopTracks', tag, limit: '200' });
+        const tagTracks: any[] = data?.tracks?.track || [];
+
+        for (const tagTrack of tagTracks) {
+          const artistName =
+            typeof tagTrack.artist === 'string' ? tagTrack.artist : tagTrack.artist?.name || '';
+          const key = `${artistName.toLowerCase()}|||${tagTrack.name.toLowerCase()}`;
+
+          if (candidateMap.has(key)) {
+            candidateMap.get(key)!.tagScore += 0.2;
+          }
+        }
+
+        console.log(`[Last.fm] Genre/mood tag "${tag}": ${tagTracks.length} tracks boosted`);
+      } catch (err) {
+        console.error(`[Last.fm] Failed to get top tracks for tag "${tag}":`, err);
+      }
+    })
+  );
 
   // Step 3: Score and rank
   const candidates = Array.from(candidateMap.values());
 
-  // Tag score is weighted more heavily — it ensures context relevance
   const scored = candidates
     .map((c) => ({ ...c, finalScore: c.matchScore + c.tagScore * 2.5 }))
     .sort((a, b) => b.finalScore - a.finalScore);
 
-  // If context tags exist and we have enough matched tracks, prefer those
-  const tagMatched = scored.filter((c) => c.tagScore > 0);
-  const result = contextTags.length > 0 && tagMatched.length >= 12 ? tagMatched : scored;
-
-  console.log(
-    `[Last.fm] Final pool: ${result.length} tracks (${tagMatched.length} matched context tags)`
-  );
+  console.log(`[Last.fm] Final pool: ${scored.length} tracks ready to spread`);
 
   // Pass a larger pool so spreadArtists has room to cap per-artist and still fill 20 slots
-  const pool = result.slice(0, 60).map((c) => ({
+  const pool = scored.slice(0, 60).map((c) => ({
     title: c.title,
     artist: c.artist,
     duration: c.duration,
