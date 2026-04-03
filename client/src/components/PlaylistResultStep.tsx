@@ -209,8 +209,9 @@ export default function PlaylistResultStep() {
       <div className="playlist-tracks p-6">
         <div className="playlist-tracks-header flex justify-between text-xs uppercase tracking-wider text-[#B3B3B3] border-b border-gray-800 pb-2 mb-2 font-medium">
           <div className="flex-1"># Title</div>
-          <div className="flex-1 text-right md:text-left">Artist</div>
-          <div className="hidden md:block w-16 text-right">Time</div>
+          <div className="flex-1 text-left">Artist</div>
+          <div className="hidden md:flex w-16 text-left">Time</div>
+          <div className="hidden md:block w-7 flex-shrink-0" />
         </div>
         
         <div className="playlist-tracks-list">
@@ -242,8 +243,8 @@ export default function PlaylistResultStep() {
                   )}
                 </div>
               </div>
-              <div className="flex-1 text-right md:text-left text-[#B3B3B3]">{track.artist}</div>
-              <div className="hidden md:block w-16 text-right text-[#B3B3B3]">
+              <div className="flex-1 text-left text-[#B3B3B3]">{track.artist}</div>
+              <div className="hidden md:block w-16 text-left text-[#B3B3B3]">
                 {formatDuration(track.duration)}
               </div>
               <button

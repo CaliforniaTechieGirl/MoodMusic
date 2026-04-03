@@ -32,6 +32,22 @@ export interface LastFmTrackResult {
 const DECADE_TAGS = ['80s', '70s', '90s', '60s', '2000s', '2010s'];
 const NATIONALITY_TAGS = ['canadian', 'british', 'australian', 'american', 'french', 'irish', 'swedish'];
 
+/** Fetch duration (seconds) for a single track via track.getInfo. Returns 0 on failure. */
+export async function getTrackDuration(artist: string, title: string): Promise<number> {
+  try {
+    const data = await apiCall({
+      method: 'track.getInfo',
+      artist,
+      track: title,
+      autocorrect: '1',
+    });
+    const dur = parseInt(data?.track?.duration ?? '0', 10);
+    return Math.floor(dur / 1000); // Last.fm returns milliseconds
+  } catch {
+    return 0;
+  }
+}
+
 export function parseContextToTags(context: string): string[] {
   const lower = context.toLowerCase();
   const tags: string[] = [];

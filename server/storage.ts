@@ -7,7 +7,7 @@ import {
 } from "@shared/schema";
 import { mockSongs } from "./data/songs";
 import { generatePlaylistName } from "../client/src/lib/utils";
-import { generateLastFmPlaylist, spreadArtists } from "./lastfm";
+import { generateLastFmPlaylist, spreadArtists, getTrackDuration } from "./lastfm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -455,11 +455,14 @@ export class MemStorage implements IStorage {
         const lastFmTracks = await generateLastFmPlaylist(suggestions, context);
 
         if (lastFmTracks.length >= 5) {
+          const suggestionDurations = await Promise.all(
+            suggestions.map((s) => getTrackDuration(s.artist, s.title))
+          );
           const suggestionTracks = suggestions.map((s, i) => ({
             id: -(i + 1),
             title: s.title,
             artist: s.artist,
-            duration: 0,
+            duration: suggestionDurations[i],
             url: `https://www.last.fm/music/${encodeURIComponent(s.artist)}/_/${encodeURIComponent(s.title)}`,
           }));
 
