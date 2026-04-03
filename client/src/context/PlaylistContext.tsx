@@ -29,6 +29,7 @@ type PlaylistContextType = {
   updateSongSuggestion: (index: number, field: 'title' | 'artist', value: string) => void;
   playlistTracks: PlaylistTrack[];
   playlistName: string;
+  setPlaylistName: (name: string) => void;
   isGenerating: boolean;
   generatePlaylist: () => Promise<void>;
   startOver: () => void;
@@ -113,6 +114,7 @@ export const PlaylistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateSongSuggestion,
         playlistTracks,
         playlistName,
+        setPlaylistName,
         isGenerating,
         generatePlaylist,
         startOver

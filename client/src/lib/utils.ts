@@ -5,33 +5,42 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// Generate a playlist name based on context
+// Generate a playlist name from actual keywords in the context
 export function generatePlaylistName(context: string): string {
-  const contextLower = context.toLowerCase();
-  
-  if (contextLower.includes('run') || contextLower.includes('jog')) {
-    return 'Running Energizers';
-  } else if (contextLower.includes('work') || contextLower.includes('focus')) {
-    return 'Focus Flow';
-  } else if (contextLower.includes('relax') || contextLower.includes('chill')) {
-    return 'Chill Vibes';
-  } else if (contextLower.includes('party') || contextLower.includes('danc')) {
-    return 'Party Anthems';
-  } else if (contextLower.includes('romantic') || contextLower.includes('dinner')) {
-    return 'Romantic Evening';
-  } else if (contextLower.includes('sleep') || contextLower.includes('bed')) {
-    return 'Slumber Sounds';
-  } else if (contextLower.includes('gym') || contextLower.includes('workout')) {
-    return 'Workout Intensity';
-  } else if (contextLower.includes('study')) {
-    return 'Study Session';
-  } else if (contextLower.includes('drive') || contextLower.includes('car')) {
-    return 'Road Trip Mix';
-  } else if (contextLower.includes('sad') || contextLower.includes('depress')) {
-    return 'Soul Soothers';
-  } else {
-    return 'Custom Mix';
+  const lower = context.toLowerCase();
+
+  const decadeMatch = context.match(/\b((?:19|20)?\d0s)\b/i);
+
+  const moods = ['mellow', 'upbeat', 'chill', 'energetic', 'dark', 'soft', 'smooth', 'funky',
+    'groovy', 'dreamy', 'melancholy', 'nostalgic', 'epic', 'intimate', 'raw', 'intense',
+    'relaxing', 'romantic', 'sad', 'happy', 'hype', 'lo-fi', 'lofi'];
+  const foundMood = moods.find(m => lower.includes(m));
+
+  const genres = ['rock', 'pop', 'jazz', 'blues', 'folk', 'country', 'hip-hop', 'hip hop',
+    'soul', 'r&b', 'classical', 'electronic', 'metal', 'punk', 'indie', 'alternative',
+    'reggae', 'latin', 'dance', 'disco', 'funk', 'emo', 'grunge', 'rap'];
+  const foundGenre = genres.find(g => lower.includes(g));
+
+  const nations = ['canadian', 'american', 'british', 'australian', 'french', 'latin',
+    'african', 'japanese', 'korean', 'swedish', 'irish', 'scottish', 'italian'];
+  const foundNation = nations.find(n => lower.includes(n));
+
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  const parts: string[] = [];
+  if (foundMood) parts.push(cap(foundMood));
+  if (decadeMatch) parts.push(decadeMatch[1]);
+  if (foundNation) parts.push(cap(foundNation));
+  if (foundGenre) parts.push(cap(foundGenre));
+
+  if (parts.length === 0) {
+    // Fall back to capitalising the first 3 meaningful words
+    const stopwords = new Set(['a', 'an', 'the', 'of', 'in', 'on', 'and', 'or', 'for', 'to', 'with']);
+    const words = context.trim().split(/\s+/).filter(w => !stopwords.has(w.toLowerCase()));
+    return words.slice(0, 3).map(cap).join(' ') || 'Custom Mix';
   }
+
+  return parts.join(' ');
 }
 
 // Format duration from seconds to MM:SS

@@ -2,12 +2,14 @@ import { useState } from "react";
 import { usePlaylist } from "@/context/PlaylistContext";
 import { Button } from "@/components/ui/button";
 import { formatDuration, calculateTotalDuration } from "@/lib/utils";
-import { Download, Share, Loader2, Music } from "lucide-react";
+import { Download, Share, Loader2, Music, Pencil, Check } from "lucide-react";
 import { SiSpotify } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 
 export default function PlaylistResultStep() {
-  const { playlistContext, playlistTracks, playlistName, startOver } = usePlaylist();
+  const { playlistContext, playlistTracks, playlistName, setPlaylistName, startOver } = usePlaylist();
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState('');
   const { toast } = useToast();
 
   const handleDownload = () => {
@@ -142,9 +144,45 @@ export default function PlaylistResultStep() {
           </div>
           <div className="flex-1 text-center md:text-left">
             <p className="uppercase tracking-widest text-xs text-[#B3B3B3] mb-1">CUSTOM PLAYLIST</p>
-            <h2 className="text-2xl md:text-4xl font-bold mb-2">
-              {playlistName}
-            </h2>
+            {isEditingName ? (
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  autoFocus
+                  className="text-2xl md:text-4xl font-bold bg-transparent border-b-2 border-[#1DB954] outline-none text-white w-full"
+                  value={editedName}
+                  onChange={e => setEditedName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      setPlaylistName(editedName.trim() || playlistName);
+                      setIsEditingName(false);
+                    } else if (e.key === 'Escape') {
+                      setIsEditingName(false);
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    setPlaylistName(editedName.trim() || playlistName);
+                    setIsEditingName(false);
+                  }}
+                  className="text-[#1DB954] hover:text-white transition-colors flex-shrink-0"
+                  aria-label="Save name"
+                >
+                  <Check className="w-6 h-6" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mb-2 group">
+                <h2 className="text-2xl md:text-4xl font-bold">{playlistName}</h2>
+                <button
+                  onClick={() => { setEditedName(playlistName); setIsEditingName(true); }}
+                  className="text-[#B3B3B3] hover:text-[#1DB954] transition-colors opacity-0 group-hover:opacity-100"
+                  aria-label="Edit playlist name"
+                >
+                  <Pencil className="w-5 h-5" />
+                </button>
+              </div>
+            )}
             <p className="text-[#B3B3B3] mb-4">
               {playlistContext}
             </p>
