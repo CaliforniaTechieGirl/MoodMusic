@@ -408,29 +408,32 @@ export async function generateLastFmPlaylist(
     console.log(`[Last.fm] Tag filter counts — both: ${countBoth}, nat-only: ${countNat}, decade-only: ${countDec}`);
 
     if (countBoth >= 30) {
-      // Enough tracks pass all constraints to fill a playlist after per-artist capping
+      // Ideal: plenty of tracks pass all constraints — hard filter on both.
       for (const [key, track] of candidateMap.entries()) {
         if (!artistPasses(track, hasDecade, hasNat)) candidateMap.delete(key);
       }
       console.log(`[Last.fm] Hard-filtered (both constraints): ${candidateMap.size} tracks`);
 
-    } else if (hasNat && countNat >= 8) {
-      // Nationality is the primary constraint — keep all nationality-passing tracks,
-      // let decade scoring rank them. Never mix in non-Canadian artists.
+    } else if (hasNat && countNat >= 20) {
+      // Enough nationality-tagged tracks to fill a playlist — hard filter on nationality,
+      // use decade as a scoring boost.  Works well for 60s Canadian (nat=117).
       for (const [key, track] of candidateMap.entries()) {
         if (!artistPasses(track, false, true)) candidateMap.delete(key);
       }
       console.log(`[Last.fm] Hard-filtered (nationality only): ${candidateMap.size} tracks (decade is soft boost)`);
 
-    } else if (!hasNat && hasDecade && countDec >= 8) {
-      // Decade-only constraint with enough tracks
+    } else if (hasDecade && countDec >= 20) {
+      // Not enough nationality-tagged tracks (e.g. 80s Canadian artists rarely tagged
+      // "canadian" on Last.fm — only 12/248 — but 243 ARE tagged "80s").
+      // Use decade as the hard filter; nationality is still a scoring boost so Canadian
+      // artists float to the top.
       for (const [key, track] of candidateMap.entries()) {
         if (!artistPasses(track, true, false)) candidateMap.delete(key);
       }
-      console.log(`[Last.fm] Hard-filtered (decade only): ${candidateMap.size} tracks`);
+      console.log(`[Last.fm] Hard-filtered (decade only): ${candidateMap.size} tracks (nationality is soft boost)`);
 
     } else {
-      // Too few tracks pass any single constraint — keep all, rely on scoring
+      // Too few tracks pass any single constraint — keep all, rely on scoring.
       console.log(`[Last.fm] Constraints relaxed (too few passing tracks) — using soft scoring only`);
     }
   }
