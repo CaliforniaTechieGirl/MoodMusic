@@ -42,11 +42,35 @@ export default function PlaylistResultStep() {
   };
   
   const [isExporting, setIsExporting] = useState(false);
+  const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string | null>(null);
 
   const exportToSpotify = async () => {
     setIsExporting(true);
+    setSpotifyPlaylistUrl(null);
+
+    // Open the popup IMMEDIATELY while we still have the user-gesture context,
+    // so browsers don't block it. Show a loading screen until we have the auth URL.
+    const width = 500, height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+    const popup = window.open('', 'spotify-auth', `width=${width},height=${height},left=${left},top=${top}`);
+
+    if (!popup) {
+      setIsExporting(false);
+      toast({
+        title: 'Popup blocked',
+        description: 'Please allow popups for this site and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Show a loading message inside the popup while we fetch the auth URL
+    popup.document.write(`<!DOCTYPE html><html><body style="margin:0;background:#191414;color:white;
+      display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
+      <p style="color:#B3B3B3">Connecting to Spotify…</p></body></html>`);
+
     try {
-      // Ask the server to initiate OAuth and return the Spotify auth URL
       const res = await fetch('/api/spotify/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -57,27 +81,16 @@ export default function PlaylistResultStep() {
       });
 
       if (!res.ok) {
+        popup.close();
         const err = await res.json();
         throw new Error(err.message || 'Failed to start Spotify export');
       }
 
       const { authUrl } = await res.json();
 
-      // Open Spotify OAuth in a popup window
-      const width = 500, height = 700;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-      const popup = window.open(
-        authUrl,
-        'spotify-auth',
-        `width=${width},height=${height},left=${left},top=${top}`
-      );
+      // Navigate the already-open popup to the Spotify auth page
+      popup.location.href = authUrl;
 
-      if (!popup) {
-        throw new Error('Popup was blocked. Please allow popups for this site and try again.');
-      }
-
-      // Listen for the result message from the popup
       const cleanup = (interval: ReturnType<typeof setInterval>, timeout: ReturnType<typeof setTimeout>) => {
         clearInterval(interval);
         clearTimeout(timeout);
@@ -92,11 +105,11 @@ export default function PlaylistResultStep() {
         cleanup(pollClosed, safetyTimeout);
 
         if (data.success) {
+          setSpotifyPlaylistUrl(data.playlistUrl);
           toast({
-            title: '🎵 Playlist created on Spotify!',
-            description: `${data.tracksAdded} tracks added${data.tracksFailed > 0 ? ` (${data.tracksFailed} not found)` : ''}. Opening playlist...`,
+            title: 'Playlist created on Spotify!',
+            description: `${data.tracksAdded} tracks added${data.tracksFailed > 0 ? ` (${data.tracksFailed} not found on Spotify)` : ''}.`,
           });
-          window.open(data.playlistUrl, '_blank');
         } else {
           toast({
             title: 'Spotify export failed',
@@ -110,9 +123,7 @@ export default function PlaylistResultStep() {
 
       // Reset if popup is closed without completing
       const pollClosed = setInterval(() => {
-        if (popup.closed) {
-          cleanup(pollClosed, safetyTimeout);
-        }
+        if (popup.closed) cleanup(pollClosed, safetyTimeout);
       }, 500);
 
       // Safety net: always reset after 3 minutes
@@ -259,23 +270,39 @@ export default function PlaylistResultStep() {
           
           {/* Export buttons */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Spotify Export - Featured Button */}
-            <Button
-              onClick={exportToSpotify}
-              disabled={isExporting}
-              className="w-full px-6 py-3 rounded-full font-medium transition duration-200 flex items-center justify-center h-auto text-white order-first disabled:opacity-70"
-              style={{
-                background: "linear-gradient(45deg, #1DB954, #1ed760)",
-                boxShadow: "0 4px 12px rgba(29, 185, 84, 0.5)"
-              }}
-            >
-              {isExporting ? (
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              ) : (
+            {/* Spotify Export / Open in Spotify */}
+            {spotifyPlaylistUrl ? (
+              <a
+                href={spotifyPlaylistUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full px-6 py-3 rounded-full font-medium transition duration-200 flex items-center justify-center h-auto text-white order-first"
+                style={{
+                  background: "linear-gradient(45deg, #1DB954, #1ed760)",
+                  boxShadow: "0 4px 12px rgba(29, 185, 84, 0.5)"
+                }}
+              >
                 <SiSpotify className="w-5 h-5 mr-2" />
-              )}
-              {isExporting ? "Connecting to Spotify…" : "Export to Spotify"}
-            </Button>
+                Open in Spotify
+              </a>
+            ) : (
+              <Button
+                onClick={exportToSpotify}
+                disabled={isExporting}
+                className="w-full px-6 py-3 rounded-full font-medium transition duration-200 flex items-center justify-center h-auto text-white order-first disabled:opacity-70"
+                style={{
+                  background: "linear-gradient(45deg, #1DB954, #1ed760)",
+                  boxShadow: "0 4px 12px rgba(29, 185, 84, 0.5)"
+                }}
+              >
+                {isExporting ? (
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                ) : (
+                  <SiSpotify className="w-5 h-5 mr-2" />
+                )}
+                {isExporting ? "Connecting to Spotify…" : "Export to Spotify"}
+              </Button>
+            )}
             
             {/* Download Button */}
             <Button
