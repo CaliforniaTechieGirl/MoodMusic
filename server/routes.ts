@@ -119,10 +119,11 @@ function callbackPage(
     <h2>${success ? 'Playlist created!' : 'Something went wrong'}</h2>
     ${success && result
       ? `<p>${result.tracksAdded} tracks added${result.tracksFailed > 0 ? `, ${result.tracksFailed} not found on Spotify` : ''}.</p>
-         <p><a href="${result.playlistUrl}" target="_blank">Open playlist in Spotify →</a></p>`
-      : `<p>${errorMessage || 'Unknown error'}</p>`
+         <p style="margin-top:16px;font-size:15px;color:#1DB954;font-weight:bold">You can now open in Spotify.</p>
+         <p style="margin-top:8px;font-size:13px;color:#555">Close this window to see the button.</p>`
+      : `<p>${errorMessage || 'Unknown error'}</p>
+         <p style="margin-top:24px;font-size:14px;color:#555">You can close this window.</p>`
     }
-    <p style="margin-top:24px;font-size:14px;color:#555">You can close this window.</p>
   </div>
   <script>
     // Send result back to the opener window, then close

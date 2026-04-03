@@ -65,10 +65,40 @@ export default function PlaylistResultStep() {
       return;
     }
 
-    // Show a loading message inside the popup while we fetch the auth URL
-    popup.document.write(`<!DOCTYPE html><html><body style="margin:0;background:#191414;color:white;
-      display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
-      <p style="color:#B3B3B3">Connecting to Spotify…</p></body></html>`);
+    // Show a loading screen with bouncing music notes while we fetch the auth URL
+    popup.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #191414; color: white; display: flex; align-items: center;
+         justify-content: center; height: 100vh; font-family: sans-serif; text-align: center; }
+  .notes { display: flex; gap: 12px; justify-content: center; margin-bottom: 20px; }
+  .note { font-size: 32px; animation: bounce 0.8s ease-in-out infinite; }
+  .note:nth-child(1) { animation-delay: 0s; }
+  .note:nth-child(2) { animation-delay: 0.15s; }
+  .note:nth-child(3) { animation-delay: 0.3s; }
+  .note:nth-child(4) { animation-delay: 0.45s; }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); opacity: 0.5; }
+    50%       { transform: translateY(-16px); opacity: 1; }
+  }
+  p { color: #B3B3B3; font-size: 15px; animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+</style>
+</head>
+<body>
+  <div>
+    <div class="notes">
+      <span class="note">♩</span>
+      <span class="note">♪</span>
+      <span class="note">♫</span>
+      <span class="note">♬</span>
+    </div>
+    <p>Connecting to Spotify…</p>
+  </div>
+</body>
+</html>`);
 
     try {
       const res = await fetch('/api/spotify/initiate', {
