@@ -28,6 +28,7 @@ type PlaylistContextType = {
   removeSongSuggestion: (index: number) => void;
   updateSongSuggestion: (index: number, field: 'title' | 'artist', value: string) => void;
   playlistTracks: PlaylistTrack[];
+  removeTrack: (id: number) => void;
   playlistName: string;
   setPlaylistName: (name: string) => void;
   isGenerating: boolean;
@@ -65,6 +66,10 @@ export const PlaylistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const newSuggestions = [...songSuggestions];
     newSuggestions[index] = { ...newSuggestions[index], [field]: value };
     setSongSuggestions(newSuggestions);
+  };
+
+  const removeTrack = (id: number) => {
+    setPlaylistTracks(prev => prev.filter(t => t.id !== id));
   };
 
   const generatePlaylist = async () => {
@@ -113,6 +118,7 @@ export const PlaylistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         removeSongSuggestion,
         updateSongSuggestion,
         playlistTracks,
+        removeTrack,
         playlistName,
         setPlaylistName,
         isGenerating,

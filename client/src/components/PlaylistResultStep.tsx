@@ -2,12 +2,12 @@ import { useState } from "react";
 import { usePlaylist } from "@/context/PlaylistContext";
 import { Button } from "@/components/ui/button";
 import { formatDuration, calculateTotalDuration } from "@/lib/utils";
-import { Download, Share, Loader2, Music, Pencil, Check } from "lucide-react";
+import { Download, Share, Loader2, Music, Pencil, Check, X } from "lucide-react";
 import { SiSpotify } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 
 export default function PlaylistResultStep() {
-  const { playlistContext, playlistTracks, playlistName, setPlaylistName, startOver } = usePlaylist();
+  const { playlistContext, playlistTracks, removeTrack, playlistName, setPlaylistName, startOver } = usePlaylist();
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
   const { toast } = useToast();
@@ -235,6 +235,13 @@ export default function PlaylistResultStep() {
               <div className="hidden md:block w-16 text-right text-[#B3B3B3]">
                 {formatDuration(track.duration)}
               </div>
+              <button
+                onClick={() => removeTrack(track.id)}
+                className="ml-3 text-[#B3B3B3] hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                aria-label="Remove track"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           ))}
         </div>
