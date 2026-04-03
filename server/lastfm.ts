@@ -257,51 +257,62 @@ export async function generateLastFmPlaylist(
     const matchesNat    = natAccepted.size === 0    || [...natAccepted].some((t) => artistTags.has(t));
     const genreScore    = genreMoodTags.filter((t) => artistTags.has(t)).length * 0.4;
 
-    if (matchesDecade) { track.tagScore += 1.5; track.decadeTagScore += 1.5; }
-    if (matchesNat)    { track.tagScore += 1.5; track.nationalityTagScore += 1.5; }
+    // Nationality weighted 2× decade — being from the right country is the stronger constraint
+    if (matchesDecade) { track.tagScore += 1.0; track.decadeTagScore += 1.0; }
+    if (matchesNat)    { track.tagScore += 2.0; track.nationalityTagScore += 2.0; }
     track.tagScore += genreScore;
   }
 
-  // Apply constraints as hard filters (with graceful fallback to soft scoring)
+  // Apply constraints as hard filters with a priority-ordered fallback:
+  //   1. Both pass (strict AND) → hard filter if ≥ 10 tracks
+  //   2. Nationality passes → hard filter to nationality-only (never let non-nat tracks in)
+  //   3. Decade passes (no nationality constraint) → hard filter to decade
+  //   4. Fully relaxed → soft scoring only
+  //
+  // Crucially: we NEVER fall back to an OR filter that mixes decade-only and nationality-only.
+  // If someone asks for "Canadian" music, The Who should not appear just because they're "60s".
   const hasDecade = decadeTagsInContext.length > 0;
   const hasNat    = nationalityTagsInContext.length > 0;
 
   if (hasDecade || hasNat) {
-    const passes = (track: LastFmTrackResult) => {
+    const artistPasses = (track: LastFmTrackResult, requireDecade: boolean, requireNat: boolean) => {
       const artistTags = artistTagMap.get(track.artist.toLowerCase()) ?? new Set<string>();
-      const decadeOk = !hasDecade || [...decadeAccepted].some((t) => artistTags.has(t));
-      const natOk    = !hasNat    || [...natAccepted].some((t) => artistTags.has(t));
+      const decadeOk = !requireDecade || [...decadeAccepted].some((t) => artistTags.has(t));
+      const natOk    = !requireNat    || [...natAccepted].some((t) => artistTags.has(t));
       return decadeOk && natOk;
     };
 
-    const passingCount = Array.from(candidateMap.values()).filter(passes).length;
-    console.log(`[Last.fm] Tag filter: ${passingCount}/${candidateMap.size} tracks pass all constraints`);
+    const countBoth = Array.from(candidateMap.values()).filter((t) => artistPasses(t, hasDecade, hasNat)).length;
+    const countNat  = hasNat ? Array.from(candidateMap.values()).filter((t) => artistPasses(t, false, true)).length : 0;
+    const countDec  = hasDecade ? Array.from(candidateMap.values()).filter((t) => artistPasses(t, true, false)).length : 0;
 
-    if (passingCount >= 12) {
-      // Enough good tracks — hard filter
+    console.log(`[Last.fm] Tag filter counts — both: ${countBoth}, nat-only: ${countNat}, decade-only: ${countDec}`);
+
+    if (countBoth >= 10) {
+      // Ideal case: enough tracks pass all constraints
       for (const [key, track] of candidateMap.entries()) {
-        if (!passes(track)) candidateMap.delete(key);
+        if (!artistPasses(track, hasDecade, hasNat)) candidateMap.delete(key);
       }
-      console.log(`[Last.fm] Hard-filtered to ${candidateMap.size} constraint-passing tracks`);
-    } else if (passingCount >= 5) {
-      // Some pass — keep all but scoring already penalises non-passing tracks
-      console.log(`[Last.fm] Soft scoring only (${passingCount} pass; threshold not met for hard filter)`);
+      console.log(`[Last.fm] Hard-filtered (both constraints): ${candidateMap.size} tracks`);
+
+    } else if (hasNat && countNat >= 8) {
+      // Nationality is the primary constraint — keep all nationality-passing tracks,
+      // let decade scoring rank them. Never mix in non-Canadian artists.
+      for (const [key, track] of candidateMap.entries()) {
+        if (!artistPasses(track, false, true)) candidateMap.delete(key);
+      }
+      console.log(`[Last.fm] Hard-filtered (nationality only): ${candidateMap.size} tracks (decade is soft boost)`);
+
+    } else if (!hasNat && hasDecade && countDec >= 8) {
+      // Decade-only constraint with enough tracks
+      for (const [key, track] of candidateMap.entries()) {
+        if (!artistPasses(track, true, false)) candidateMap.delete(key);
+      }
+      console.log(`[Last.fm] Hard-filtered (decade only): ${candidateMap.size} tracks`);
+
     } else {
-      // Too few — relax to individual constraints (decade only, or nationality only)
-      const relaxedPasses = (track: LastFmTrackResult) => {
-        const artistTags = artistTagMap.get(track.artist.toLowerCase()) ?? new Set<string>();
-        return (!hasDecade || [...decadeAccepted].some((t) => artistTags.has(t)))
-            || (!hasNat    || [...natAccepted].some((t) => artistTags.has(t)));
-      };
-      const relaxedCount = Array.from(candidateMap.values()).filter(relaxedPasses).length;
-      if (relaxedCount >= 10) {
-        for (const [key, track] of candidateMap.entries()) {
-          if (!relaxedPasses(track)) candidateMap.delete(key);
-        }
-        console.log(`[Last.fm] Relaxed to OR filter: ${candidateMap.size} tracks pass at least one constraint`);
-      } else {
-        console.log(`[Last.fm] Constraints fully relaxed — using similarity scores only`);
-      }
+      // Too few tracks pass any single constraint — keep all, rely on scoring
+      console.log(`[Last.fm] Constraints relaxed (too few passing tracks) — using soft scoring only`);
     }
   }
 
