@@ -76,11 +76,18 @@ export default function PlaylistResultStep() {
       }
 
       // Listen for the result message from the popup
-      const handleMessage = (event: MessageEvent) => {
-        if (typeof event.data !== 'object' || event.data === null) return;
-        const data = event.data;
+      const cleanup = (interval: ReturnType<typeof setInterval>, timeout: ReturnType<typeof setTimeout>) => {
+        clearInterval(interval);
+        clearTimeout(timeout);
         window.removeEventListener('message', handleMessage);
         setIsExporting(false);
+      };
+
+      const handleMessage = (event: MessageEvent) => {
+        if (typeof event.data !== 'object' || event.data === null) return;
+        if (!('success' in event.data)) return;
+        const data = event.data;
+        cleanup(pollClosed, safetyTimeout);
 
         if (data.success) {
           toast({
@@ -99,14 +106,17 @@ export default function PlaylistResultStep() {
 
       window.addEventListener('message', handleMessage);
 
-      // Fallback: if popup closes without sending a message
+      // Reset if popup is closed without completing
       const pollClosed = setInterval(() => {
         if (popup.closed) {
-          clearInterval(pollClosed);
-          window.removeEventListener('message', handleMessage);
-          setIsExporting(false);
+          cleanup(pollClosed, safetyTimeout);
         }
       }, 500);
+
+      // Safety net: always reset after 3 minutes
+      const safetyTimeout = setTimeout(() => {
+        cleanup(pollClosed, safetyTimeout);
+      }, 3 * 60 * 1000);
 
     } catch (err: any) {
       setIsExporting(false);
