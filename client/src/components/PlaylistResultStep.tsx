@@ -2,8 +2,8 @@ import { useState } from "react";
 import { usePlaylist } from "@/context/PlaylistContext";
 import { Button } from "@/components/ui/button";
 import { formatDuration, calculateTotalDuration } from "@/lib/utils";
-import { Download, Share, Loader2 } from "lucide-react";
-import SpotifyLogo from "./SpotifyLogo";
+import { Download, Share, Loader2, Music } from "lucide-react";
+import { SiSpotify } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 
 export default function PlaylistResultStep() {
@@ -135,7 +135,9 @@ export default function PlaylistResultStep() {
           <div className="playlist-cover shadow-lg w-48 h-48 flex-shrink-0 mb-4 md:mb-0 md:mr-6">
             <div className="playlist-card w-full h-full rounded-lg flex items-center justify-center" 
                  style={{ background: 'linear-gradient(145deg, #191414, #252525)' }}>
-              <SpotifyLogo className="w-24 h-24 text-[#1DB954]" />
+              <div className="w-24 h-24 rounded-full bg-[#1DB954] flex items-center justify-center">
+                <Music className="w-12 h-12 text-white" />
+              </div>
             </div>
           </div>
           <div className="flex-1 text-center md:text-left">
@@ -225,7 +227,7 @@ export default function PlaylistResultStep() {
               {isExporting ? (
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
               ) : (
-                <SpotifyLogo className="w-5 h-5 mr-2" />
+                <SiSpotify className="w-5 h-5 mr-2" />
               )}
               {isExporting ? "Connecting to Spotify…" : "Export to Spotify"}
             </Button>
