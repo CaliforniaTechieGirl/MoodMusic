@@ -184,10 +184,18 @@ export async function generateLastFmPlaylist(
 
   console.log(`[Last.fm] Total candidates after similar-track lookup: ${candidateMap.size}`);
 
-  // Step 2a: Process decade tags — these are MANDATORY filters.
-  // We fetch their top tracks, add them as candidates, then hard-filter the pool.
+  // Step 2: Process decade and nationality constraint tags.
+  //
+  // Strategy depends on which constraints are present:
+  //   • Decade only  → hard filter: pool is restricted to confirmed decade tracks
+  //   • Nationality only → hard filter: pool is restricted to confirmed nationality tracks (2 pages)
+  //   • Both together  → union approach: BOTH tag lists expand the pool; tracks confirmed
+  //                       by BOTH constraints get a big score boost and rise to the top;
+  //                       tracks in only one list act as a fallback. This avoids the empty-
+  //                       intersection problem (e.g. "60s" top-200 has almost no Canadian tracks).
   const decadeTagsInContext = contextTags.filter((t) => DECADE_TAGS.includes(t));
   const nationalityTagsInContext = contextTags.filter((t) => NATIONALITY_TAGS.includes(t));
+  const hasBothConstraints = decadeTagsInContext.length > 0 && nationalityTagsInContext.length > 0;
   const genreMoodTags = contextTags.filter(
     (t) => !DECADE_TAGS.includes(t) && !NATIONALITY_TAGS.includes(t)
   );
@@ -195,90 +203,101 @@ export async function generateLastFmPlaylist(
   const decadeKeySet = new Set<string>();
   const nationalityKeySet = new Set<string>();
 
-  // Fetch decade tag tracks sequentially (order matters — we mutate the map)
+  // Helper: add a tag-list track to the candidate pool (or boost if already present)
+  const addTagTrack = (tagTrack: any, tagScore: number, isDecade: boolean, isNat: boolean) => {
+    const artistName =
+      typeof tagTrack.artist === 'string' ? tagTrack.artist : tagTrack.artist?.name || '';
+    const key = `${artistName.toLowerCase()}|||${tagTrack.name.toLowerCase()}`;
+
+    if (isDecade) decadeKeySet.add(key);
+    if (isNat) nationalityKeySet.add(key);
+
+    if (candidateMap.has(key)) {
+      const c = candidateMap.get(key)!;
+      c.tagScore += tagScore;
+      if (isDecade) c.decadeTagScore += tagScore;
+      if (isNat) c.nationalityTagScore += tagScore;
+    } else {
+      candidateMap.set(key, {
+        title: tagTrack.name,
+        artist: artistName,
+        duration: typeof tagTrack.duration === 'number' ? tagTrack.duration : 0,
+        url: tagTrack.url || '',
+        matchScore: 0,
+        tagScore,
+        decadeTagScore: isDecade ? tagScore : 0,
+        nationalityTagScore: isNat ? tagScore : 0,
+      });
+    }
+  };
+
+  // Fetch decade tag tracks (always adds to pool)
   for (const decadeTag of decadeTagsInContext) {
     try {
       const data = await apiCall({ method: 'tag.getTopTracks', tag: decadeTag, limit: '200' });
       const tagTracks: any[] = data?.tracks?.track || [];
-
-      for (const tagTrack of tagTracks) {
-        const artistName =
-          typeof tagTrack.artist === 'string' ? tagTrack.artist : tagTrack.artist?.name || '';
-        const key = `${artistName.toLowerCase()}|||${tagTrack.name.toLowerCase()}`;
-        decadeKeySet.add(key);
-
-        if (candidateMap.has(key)) {
-          candidateMap.get(key)!.tagScore += 0.5;
-          candidateMap.get(key)!.decadeTagScore += 0.5;
-        } else {
-          // Add decade tracks as candidates even if not in the similar-tracks pool
-          candidateMap.set(key, {
-            title: tagTrack.name,
-            artist: artistName,
-            duration: typeof tagTrack.duration === 'number' ? tagTrack.duration : 0,
-            url: tagTrack.url || '',
-            matchScore: 0,
-            tagScore: 0.5,
-            decadeTagScore: 0.5,
-            nationalityTagScore: 0,
-          });
-        }
-      }
-
+      for (const t of tagTracks) addTagTrack(t, 0.5, true, false);
       console.log(`[Last.fm] Decade tag "${decadeTag}": ${tagTracks.length} tracks added/boosted`);
     } catch (err) {
       console.error(`[Last.fm] Failed to get top tracks for decade tag "${decadeTag}":`, err);
     }
   }
 
-  // Hard-filter: if a decade was specified, remove any candidate NOT confirmed in that decade
-  if (decadeTagsInContext.length > 0) {
+  // Fetch nationality tag tracks (always adds to pool; fetch 2 pages when combined with decade)
+  for (const natTag of nationalityTagsInContext) {
+    const pages = hasBothConstraints ? [1, 2] : [1];
+    for (const page of pages) {
+      try {
+        const data = await apiCall({
+          method: 'tag.getTopTracks', tag: natTag, limit: '200', page: String(page),
+        });
+        const tagTracks: any[] = data?.tracks?.track || [];
+        for (const t of tagTracks) addTagTrack(t, 0.5, false, true);
+        console.log(`[Last.fm] Nationality tag "${natTag}" page ${page}: ${tagTracks.length} tracks added/boosted`);
+      } catch (err) {
+        console.error(`[Last.fm] Failed to get top tracks for nationality tag "${natTag}":`, err);
+      }
+    }
+  }
+
+  // Apply filtering based on which constraints are present
+  if (hasBothConstraints) {
+    // Union approach: remove tracks confirmed by neither list, then super-boost intersection
     let removed = 0;
     for (const key of candidateMap.keys()) {
-      if (!decadeKeySet.has(key)) {
+      if (!decadeKeySet.has(key) && !nationalityKeySet.has(key)) {
         candidateMap.delete(key);
         removed++;
       }
     }
-    console.log(`[Last.fm] Decade hard-filter removed ${removed} non-decade tracks. Remaining: ${candidateMap.size}`);
-  }
-
-  // Step 2b: Process nationality tags — also mandatory filters (same logic)
-  for (const natTag of nationalityTagsInContext) {
-    try {
-      const data = await apiCall({ method: 'tag.getTopTracks', tag: natTag, limit: '200' });
-      const tagTracks: any[] = data?.tracks?.track || [];
-
-      for (const tagTrack of tagTracks) {
-        const artistName =
-          typeof tagTrack.artist === 'string' ? tagTrack.artist : tagTrack.artist?.name || '';
-        const key = `${artistName.toLowerCase()}|||${tagTrack.name.toLowerCase()}`;
-        nationalityKeySet.add(key);
-
-        if (candidateMap.has(key)) {
-          candidateMap.get(key)!.tagScore += 0.5;
-          candidateMap.get(key)!.nationalityTagScore += 0.5;
-        }
+    // Strong bonus for tracks confirmed by BOTH constraints — they rank highest
+    let both = 0;
+    for (const [key, track] of candidateMap.entries()) {
+      if (decadeKeySet.has(key) && nationalityKeySet.has(key)) {
+        track.tagScore += 2.0;
+        both++;
       }
-
-      console.log(`[Last.fm] Nationality tag "${natTag}": ${tagTracks.length} tracks boosted`);
-    } catch (err) {
-      console.error(`[Last.fm] Failed to get top tracks for nationality tag "${natTag}":`, err);
     }
-  }
-
-  // Hard-filter: if nationality was specified and we have enough matches, keep only those
-  if (nationalityTagsInContext.length > 0 && nationalityKeySet.size > 0) {
+    console.log(
+      `[Last.fm] Both-constraint filter: removed ${removed} untagged, ` +
+      `${both} tracks confirmed by BOTH (decade+nationality), pool: ${candidateMap.size}`
+    );
+  } else if (decadeTagsInContext.length > 0) {
+    // Decade only: hard filter
+    let removed = 0;
+    for (const key of candidateMap.keys()) {
+      if (!decadeKeySet.has(key)) { candidateMap.delete(key); removed++; }
+    }
+    console.log(`[Last.fm] Decade hard-filter removed ${removed}. Remaining: ${candidateMap.size}`);
+  } else if (nationalityTagsInContext.length > 0) {
+    // Nationality only: hard filter if we have enough tracks
     const natMatched = Array.from(candidateMap.keys()).filter((k) => nationalityKeySet.has(k));
-    if (natMatched.length >= 15) {
+    if (natMatched.length >= 10) {
       let removed = 0;
       for (const key of candidateMap.keys()) {
-        if (!nationalityKeySet.has(key)) {
-          candidateMap.delete(key);
-          removed++;
-        }
+        if (!nationalityKeySet.has(key)) { candidateMap.delete(key); removed++; }
       }
-      console.log(`[Last.fm] Nationality hard-filter removed ${removed} tracks. Remaining: ${candidateMap.size}`);
+      console.log(`[Last.fm] Nationality hard-filter removed ${removed}. Remaining: ${candidateMap.size}`);
     }
   }
 
