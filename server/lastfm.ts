@@ -283,22 +283,52 @@ export async function generateLastFmPlaylist(
 
   // Apply filtering based on which constraints are present
   if (hasBothConstraints) {
-    // Decade = hard filter: remove tracks not confirmed by any decade tag/alias
-    let removed = 0;
-    for (const key of candidateMap.keys()) {
-      if (!decadeKeySet.has(key)) { candidateMap.delete(key); removed++; }
-    }
-    console.log(`[Last.fm] Decade hard-filter removed ${removed}. Remaining: ${candidateMap.size}`);
+    // ── Both decade + nationality ──────────────────────────────────────────────────
+    // Last.fm track-level tags rarely overlap between era tags ("60s", "1960s") and
+    // nationality tags ("canadian rock", "cancon") — the intersection is often 0.
+    //
+    // Solution: build a NATIONALITY-CONFIRMED ARTISTS set from the nationality tag
+    // track pool, then use that to identify similar tracks from the right country.
+    // This captures "Neil Young track in similar pool" even if that specific track
+    // isn't in the "canadian" tag list, because Neil Young IS in the "canadian rock"
+    // tag list.
 
-    // Within the decade pool: strongly boost tracks also confirmed by nationality
-    let natConfirmed = 0;
-    for (const [key, track] of candidateMap.entries()) {
-      if (nationalityKeySet.has(key)) {
-        track.tagScore += 2.0; // rises to top
-        natConfirmed++;
+    // Step A: extract all artists confirmed by nationality tags
+    const nationalityArtistSet = new Set<string>();
+    for (const [, track] of candidateMap.entries()) {
+      if (track.nationalityTagScore > 0) {
+        nationalityArtistSet.add(track.artist.toLowerCase());
       }
     }
-    console.log(`[Last.fm] ${natConfirmed} of ${candidateMap.size} decade tracks also confirmed as nationality`);
+    console.log(`[Last.fm] Nationality-confirmed artists from tag pool: ${nationalityArtistSet.size}`);
+
+    // Step B: strongly boost any similar track whose artist is nationality-confirmed
+    let artistNatBoost = 0;
+    for (const [, track] of candidateMap.entries()) {
+      if (track.matchScore > 0 && nationalityArtistSet.has(track.artist.toLowerCase())) {
+        track.tagScore += 3.0;
+        track.nationalityTagScore += 3.0;
+        artistNatBoost++;
+      }
+    }
+    console.log(`[Last.fm] Boosted ${artistNatBoost} similar tracks via nationality-confirmed artist`);
+
+    // Step C: hard-filter non-similar tracks to decade only
+    // Similar tracks (matchScore > 0) are kept regardless — they are era-appropriate
+    // because the user's seed song is from the right era.
+    let removed = 0;
+    for (const [key, track] of candidateMap.entries()) {
+      if (track.matchScore === 0 && !decadeKeySet.has(key)) {
+        candidateMap.delete(key);
+        removed++;
+      }
+    }
+    // Boost decade-confirmed tracks so they rank above untagged similar tracks
+    for (const [key, track] of candidateMap.entries()) {
+      if (decadeKeySet.has(key)) track.tagScore += 1.0;
+    }
+    console.log(`[Last.fm] Both-constraint pool: removed ${removed} non-similar non-decade tracks. Remaining: ${candidateMap.size}`);
+
   } else if (decadeTagsInContext.length > 0) {
     // Decade only: hard filter
     let removed = 0;
