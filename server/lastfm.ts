@@ -221,48 +221,76 @@ export async function generateLastFmPlaylist(
     `[Last.fm] Final pool: ${result.length} tracks (${tagMatched.length} matched context tags)`
   );
 
-  const top20 = result.slice(0, 20).map((c) => ({
+  // Pass a larger pool so spreadArtists has room to cap per-artist and still fill 20 slots
+  const pool = result.slice(0, 60).map((c) => ({
     title: c.title,
     artist: c.artist,
     duration: c.duration,
     url: c.url,
   }));
 
-  return spreadArtists(top20);
+  return spreadArtists(pool, 20);
 }
 
-// Reorder tracks so the same artist never plays back-to-back,
+function shuffleArray<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Reorder tracks so the same artist never plays back-to-back and appears at most twice,
 // unless the playlist is single-artist focused (>70% one artist).
-function spreadArtists<T extends { artist: string }>(tracks: T[]): T[] {
+function spreadArtists<T extends { artist: string }>(tracks: T[], limit = 20): T[] {
   if (tracks.length === 0) return tracks;
 
-  // Count artist occurrences
-  const counts = new Map<string, number>();
+  // Check if single-artist focused using the raw pool
+  const rawCounts = new Map<string, number>();
   for (const t of tracks) {
     const a = t.artist.toLowerCase();
-    counts.set(a, (counts.get(a) || 0) + 1);
+    rawCounts.set(a, (rawCounts.get(a) || 0) + 1);
+  }
+  const maxRaw = Math.max(...rawCounts.values());
+  if (maxRaw / tracks.length > 0.7) return tracks.slice(0, limit);
+
+  // Cap each artist at 2 tracks (keep highest-scored, which are earliest in the array)
+  const artistSeen = new Map<string, number>();
+  const capped: T[] = [];
+  for (const t of tracks) {
+    const a = t.artist.toLowerCase();
+    const seen = artistSeen.get(a) || 0;
+    if (seen < 2) {
+      capped.push(t);
+      artistSeen.set(a, seen + 1);
+    }
+    if (capped.length >= limit) break;
   }
 
-  // If one artist dominates (single-artist playlist), leave order as-is
-  const maxCount = Math.max(...counts.values());
-  if (maxCount / tracks.length > 0.7) return tracks;
+  // Group into round 1 (first appearance) and round 2 (second appearance per artist)
+  const round1: T[] = [];
+  const round2: T[] = [];
+  const artistRound = new Map<string, number>();
+  for (const t of capped) {
+    const a = t.artist.toLowerCase();
+    const round = artistRound.get(a) || 0;
+    if (round === 0) { round1.push(t); artistRound.set(a, 1); }
+    else             { round2.push(t); }
+  }
 
-  // Greedy spread: at each position pick the highest-priority (earliest in array)
-  // track whose artist differs from the previous one added.
-  const remaining = [...tracks];
-  const out: T[] = [];
+  // Shuffle each round independently for variety
+  const s1 = shuffleArray(round1);
+  const s2 = shuffleArray(round2);
 
-  while (remaining.length > 0) {
-    const lastArtist = out.length > 0 ? out[out.length - 1].artist.toLowerCase() : null;
-    const idx = remaining.findIndex(t => t.artist.toLowerCase() !== lastArtist);
-
-    if (idx === -1) {
-      // Only same-artist tracks left — just append them
-      out.push(...remaining.splice(0));
-    } else {
-      out.push(...remaining.splice(idx, 1));
+  // Fix boundary: if last of s1 and first of s2 share an artist, swap s2[0] with another
+  if (s1.length > 0 && s2.length > 0) {
+    const lastArtist = s1[s1.length - 1].artist.toLowerCase();
+    if (s2[0].artist.toLowerCase() === lastArtist) {
+      const swapIdx = s2.findIndex(t => t.artist.toLowerCase() !== lastArtist);
+      if (swapIdx > 0) [s2[0], s2[swapIdx]] = [s2[swapIdx], s2[0]];
     }
   }
 
-  return out;
+  return [...s1, ...s2].slice(0, limit);
 }
