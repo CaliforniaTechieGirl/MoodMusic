@@ -4,11 +4,18 @@ const SPOTIFY_API = 'https://api.spotify.com/v1';
 const SCOPES = 'playlist-modify-public playlist-modify-private';
 
 function getRedirectUri(): string {
-  const domains = process.env.REPLIT_DOMAINS;
-  if (domains) {
-    const primary = domains.split(',')[0].trim();
+  // Explicit override wins — set this in Vercel / any other host's env vars
+  if (process.env.SPOTIFY_REDIRECT_URI) return process.env.SPOTIFY_REDIRECT_URI;
+
+  // Replit deployment
+  if (process.env.REPLIT_DOMAINS) {
+    const primary = process.env.REPLIT_DOMAINS.split(',')[0].trim();
     return `https://${primary}/callback`;
   }
+
+  // Vercel preview / production deployments
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}/callback`;
+
   return 'http://localhost:5000/callback';
 }
 

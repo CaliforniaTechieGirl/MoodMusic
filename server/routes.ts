@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { randomBytes } from "crypto";
 import { storage } from "./storage";
@@ -11,9 +11,29 @@ import {
   exportToSpotify,
 } from "./spotify";
 
+// Simple in-memory rate limiter: max 5 playlist generations per IP per minute
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function rateLimit(req: Request, res: Response, next: NextFunction) {
+  const ip = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim() ?? req.socket.remoteAddress ?? 'unknown';
+  const now = Date.now();
+  const window = 60_000; // 1 minute
+  const limit = 5;
+
+  let entry = rateLimitMap.get(ip);
+  if (!entry || entry.resetAt < now) {
+    entry = { count: 0, resetAt: now + window };
+    rateLimitMap.set(ip, entry);
+  }
+  entry.count++;
+  if (entry.count > limit) {
+    return res.status(429).json({ message: "Too many requests — please wait a minute before generating another playlist." });
+  }
+  next();
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Generate playlist
-  app.post('/api/playlist/generate', async (req, res) => {
+  app.post('/api/playlist/generate', rateLimit, async (req, res) => {
     try {
       const validatedRequest = playlistRequestSchema.parse(req.body);
       const playlist = await storage.generatePlaylist(validatedRequest);
