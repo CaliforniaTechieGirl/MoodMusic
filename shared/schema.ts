@@ -72,5 +72,6 @@ export type PlaylistResponse = {
     artist: string;
     album?: string;
     duration: number;
+    url?: string;
   }>;
 };

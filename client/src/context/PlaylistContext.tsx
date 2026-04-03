@@ -14,6 +14,7 @@ export type PlaylistTrack = {
   artist: string;
   album?: string;
   duration: number;
+  url?: string;
 };
 
 type PlaylistContextType = {

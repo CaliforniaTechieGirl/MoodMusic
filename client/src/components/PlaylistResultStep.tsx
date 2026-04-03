@@ -109,7 +109,18 @@ export default function PlaylistResultStep() {
               <div className="flex-1 flex items-center">
                 <span className="mr-4 text-[#B3B3B3] w-4 text-right">{index + 1}</span>
                 <div>
-                  <div className="font-medium">{track.title}</div>
+                  {track.url ? (
+                    <a
+                      href={track.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium hover:text-[#1DB954] hover:underline transition-colors"
+                    >
+                      {track.title}
+                    </a>
+                  ) : (
+                    <div className="font-medium">{track.title}</div>
+                  )}
                   {track.album && (
                     <div className="text-xs text-[#B3B3B3] hidden md:block">Album: {track.album}</div>
                   )}

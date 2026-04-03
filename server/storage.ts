@@ -7,6 +7,7 @@ import {
 } from "@shared/schema";
 import { mockSongs } from "./data/songs";
 import { generatePlaylistName } from "../client/src/lib/utils";
+import { generateLastFmPlaylist } from "./lastfm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -446,112 +447,98 @@ export class MemStorage implements IStorage {
 
   async generatePlaylist(request: PlaylistRequest): Promise<PlaylistResponse> {
     const { context, suggestions } = request;
-    
-    // 1. Get songs from user suggestions
+    const playlistName = generatePlaylistName(context);
+
+    // Try Last.fm first — this gives real "sounds like" recommendations
+    if (process.env.LASTFM_API_KEY) {
+      try {
+        const lastFmTracks = await generateLastFmPlaylist(suggestions, context);
+
+        if (lastFmTracks.length >= 5) {
+          // Always put the user's suggested songs first, then Last.fm recommendations
+          const suggestionTracks = suggestions.map((s, i) => ({
+            id: -(i + 1), // negative IDs to distinguish from DB songs
+            title: s.title,
+            artist: s.artist,
+            duration: 0,
+            url: `https://www.last.fm/music/${encodeURIComponent(s.artist)}/_/${encodeURIComponent(s.title)}`,
+          }));
+
+          // Deduplicate: remove Last.fm results that match user suggestions
+          const suggestionKeys = new Set(
+            suggestions.map((s) => `${s.artist.toLowerCase()}|||${s.title.toLowerCase()}`)
+          );
+          const filteredLastFm = lastFmTracks.filter(
+            (t) => !suggestionKeys.has(`${t.artist.toLowerCase()}|||${t.title.toLowerCase()}`)
+          );
+
+          const combined = [
+            ...suggestionTracks,
+            ...filteredLastFm.slice(0, 20 - suggestionTracks.length),
+          ];
+
+          return {
+            name: playlistName,
+            tracks: combined.map((track, index) => ({
+              id: track.id ?? index + 1,
+              title: track.title,
+              artist: track.artist,
+              duration: track.duration,
+              url: track.url,
+            })),
+          };
+        }
+      } catch (err) {
+        console.error('[Last.fm] Playlist generation failed, falling back to local data:', err);
+      }
+    }
+
+    // Fallback: use local song database if Last.fm is unavailable
+    console.log('[Storage] Using local song database as fallback');
     const suggestedSongs: Song[] = [];
     for (const suggestion of suggestions) {
       const { title, artist } = suggestion;
-      
-      // Try to find an exact match
-      let matchedSong = Array.from(this.songs.values()).find(song => 
-        song.title.toLowerCase() === title.toLowerCase() && 
-        song.artist.toLowerCase() === artist.toLowerCase()
+      let matchedSong = Array.from(this.songs.values()).find(
+        (song) =>
+          song.title.toLowerCase() === title.toLowerCase() &&
+          song.artist.toLowerCase() === artist.toLowerCase()
       );
-      
-      // If no exact match, try to find a similar song by the same artist
       if (!matchedSong) {
-        matchedSong = Array.from(this.songs.values()).find(song => 
+        matchedSong = Array.from(this.songs.values()).find((song) =>
           song.artist.toLowerCase().includes(artist.toLowerCase())
         );
       }
-      
-      // If still no match, create a new song entry
       if (!matchedSong) {
         const id = this.currentSongId++;
-        const duration = Math.floor(180 + Math.random() * 120); // Random duration between 3-5 mins
-        matchedSong = { 
-          id, 
-          title, 
-          artist, 
-          album: null,
-          duration,
-          genre: [],
-          mood: []
-        };
+        matchedSong = { id, title, artist, album: null, duration: 210, genre: [], mood: [] };
         this.songs.set(id, matchedSong);
       }
-      
       suggestedSongs.push(matchedSong);
     }
-    
-    // 2. Get songs based on context - this is now our primary source after user suggestions
+
     const contextSongs = this.getRelevantSongsByContext(context);
-    
-    // 3. Create a set of existing song IDs to avoid duplicates
-    const existingSongIds = new Set(suggestedSongs.map(song => song.id));
-    
-    // 4. Get additional similar songs based on the suggested artists
-    const suggestionArtists = suggestions.map(s => s.artist);
-    const similarSongs = this.getSimilarSongs(suggestionArtists, existingSongIds);
-    
-    // 5. Begin with suggested songs
-    const playlistSongs: Song[] = [...suggestedSongs];
-    
-    // 6. Prioritize context-relevant songs
-    // We'll use a higher ratio of context songs (60-70%) for better context matching
-    const maxContextSongs = 14; // 70% of a 20-song playlist after user suggestions
-    const maxSimilarSongs = 20 - maxContextSongs - playlistSongs.length;
-    
-    // Add context songs first (prioritizing context over artist similarity)
-    let contextSongsAdded = 0;
+    const existingSongIds = new Set(suggestedSongs.map((s) => s.id));
+    const playlistSongsArr: Song[] = [...suggestedSongs];
+
     for (const song of contextSongs) {
-      if (contextSongsAdded >= maxContextSongs || playlistSongs.length >= 20) break;
+      if (playlistSongsArr.length >= 20) break;
       if (!existingSongIds.has(song.id)) {
-        playlistSongs.push(song);
+        playlistSongsArr.push(song);
         existingSongIds.add(song.id);
-        contextSongsAdded++;
       }
     }
-    
-    // Add similar songs to fill remaining slots
-    let similarSongsAdded = 0;
-    for (const song of similarSongs) {
-      if (similarSongsAdded >= maxSimilarSongs || playlistSongs.length >= 20) break;
-      if (!existingSongIds.has(song.id)) {
-        playlistSongs.push(song);
-        existingSongIds.add(song.id);
-        similarSongsAdded++;
-      }
-    }
-    
-    // If we still need more songs, add more context songs
-    if (playlistSongs.length < 20) {
-      // Get more context songs from later in the list
-      for (let i = contextSongsAdded; i < contextSongs.length; i++) {
-        if (playlistSongs.length >= 20) break;
-        const song = contextSongs[i];
-        if (!existingSongIds.has(song.id)) {
-          playlistSongs.push(song);
-          existingSongIds.add(song.id);
-        }
-      }
-    }
-    
-    // 7. Arrange songs in a pleasing musical order
-    const orderedSongs = this.arrangeInMusicalOrder(playlistSongs);
-    
-    // 8. Create response object
-    const playlistName = generatePlaylistName(context);
-    
+
+    const orderedSongs = this.arrangeInMusicalOrder(playlistSongsArr);
+
     return {
       name: playlistName,
-      tracks: orderedSongs.map(song => ({
+      tracks: orderedSongs.map((song) => ({
         id: song.id,
         title: song.title,
         artist: song.artist,
-        album: song.album || undefined, // Convert null to undefined to match response type
-        duration: song.duration
-      }))
+        album: song.album || undefined,
+        duration: song.duration,
+      })),
     };
   }
 }
