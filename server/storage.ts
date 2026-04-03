@@ -7,7 +7,7 @@ import {
 } from "@shared/schema";
 import { mockSongs } from "./data/songs";
 import { generatePlaylistName } from "../client/src/lib/utils";
-import { generateLastFmPlaylist } from "./lastfm";
+import { generateLastFmPlaylist, spreadArtists } from "./lastfm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -455,27 +455,41 @@ export class MemStorage implements IStorage {
         const lastFmTracks = await generateLastFmPlaylist(suggestions, context);
 
         if (lastFmTracks.length >= 5) {
-          // Always put the user's suggested songs first, then Last.fm recommendations
           const suggestionTracks = suggestions.map((s, i) => ({
-            id: -(i + 1), // negative IDs to distinguish from DB songs
+            id: -(i + 1),
             title: s.title,
             artist: s.artist,
             duration: 0,
             url: `https://www.last.fm/music/${encodeURIComponent(s.artist)}/_/${encodeURIComponent(s.title)}`,
           }));
 
-          // Deduplicate: remove Last.fm results that match user suggestions
+          // Count how many times each suggestion artist already appears
+          const artistCounts = new Map<string, number>();
+          for (const s of suggestionTracks) {
+            const a = s.artist.toLowerCase();
+            artistCounts.set(a, (artistCounts.get(a) || 0) + 1);
+          }
+
+          // Deduplicate + apply global 2-per-artist cap (counting suggestions)
           const suggestionKeys = new Set(
             suggestions.map((s) => `${s.artist.toLowerCase()}|||${s.title.toLowerCase()}`)
           );
-          const filteredLastFm = lastFmTracks.filter(
-            (t) => !suggestionKeys.has(`${t.artist.toLowerCase()}|||${t.title.toLowerCase()}`)
-          );
+          const filteredLastFm: typeof lastFmTracks = [];
+          for (const t of lastFmTracks) {
+            if (suggestionKeys.has(`${t.artist.toLowerCase()}|||${t.title.toLowerCase()}`)) continue;
+            const a = t.artist.toLowerCase();
+            const count = artistCounts.get(a) || 0;
+            if (count < 2) {
+              filteredLastFm.push(t);
+              artistCounts.set(a, count + 1);
+            }
+          }
 
-          const combined = [
-            ...suggestionTracks,
-            ...filteredLastFm.slice(0, 20 - suggestionTracks.length),
-          ];
+          // Combine and spread so the same artist never appears back-to-back
+          const combined = spreadArtists(
+            [...suggestionTracks, ...filteredLastFm],
+            20
+          );
 
           return {
             name: playlistName,

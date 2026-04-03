@@ -232,7 +232,7 @@ export async function generateLastFmPlaylist(
   return spreadArtists(pool, 20);
 }
 
-function shuffleArray<T>(arr: T[]): T[] {
+export function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -243,7 +243,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 
 // Reorder tracks so the same artist never plays back-to-back and appears at most twice,
 // unless the playlist is single-artist focused (>70% one artist).
-function spreadArtists<T extends { artist: string }>(tracks: T[], limit = 20): T[] {
+export function spreadArtists<T extends { artist: string }>(tracks: T[], limit = 20): T[] {
   if (tracks.length === 0) return tracks;
 
   // Check if single-artist focused using the raw pool
