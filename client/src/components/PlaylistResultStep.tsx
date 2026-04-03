@@ -72,6 +72,7 @@ export default function PlaylistResultStep() {
     popup.document.write(`<!DOCTYPE html>
 <html>
 <head>
+<title>Connecting to Spotify</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #191414; color: white; display: flex; align-items: center;
