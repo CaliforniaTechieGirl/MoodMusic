@@ -56,7 +56,7 @@ export default function PlaylistResultStep() {
     const width = 480, height = 520;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
-    const popup = window.open('', 'spotify-auth', `width=${width},height=${height},left=${left},top=${top},location=no,toolbar=no,menubar=no,status=no,scrollbars=yes`);
+    const popup = window.open('', 'spotify-auth', `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,status=no,scrollbars=yes`);
 
     if (!popup) {
       setIsExporting(false);
