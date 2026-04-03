@@ -53,10 +53,10 @@ export default function PlaylistResultStep() {
 
     // Open the popup IMMEDIATELY while we still have the user-gesture context,
     // so browsers don't block it. Show a loading screen until we have the auth URL.
-    const width = 500, height = 700;
+    const width = 480, height = 520;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
-    const popup = window.open('', 'spotify-auth', `width=${width},height=${height},left=${left},top=${top}`);
+    const popup = window.open('', 'spotify-auth', `width=${width},height=${height},left=${left},top=${top},location=no,toolbar=no,menubar=no,status=no,scrollbars=yes`);
 
     if (!popup) {
       setIsExporting(false);
