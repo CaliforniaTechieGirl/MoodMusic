@@ -165,8 +165,9 @@ export async function exportToSpotify(
   }
 
   // Add tracks (Spotify limit: 100 per request)
+  // Endpoint renamed from /tracks to /items in Spotify's Feb 2026 API update
   for (let i = 0; i < uris.length; i += 100) {
-    await spotifyRequest(accessToken, 'POST', `/playlists/${playlist.id}/tracks`, {
+    await spotifyRequest(accessToken, 'POST', `/playlists/${playlist.id}/items`, {
       uris: uris.slice(i, i + 100),
     });
   }
