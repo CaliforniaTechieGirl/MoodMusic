@@ -289,12 +289,19 @@ export default function PlaylistResultStep() {
         </div>
 
         {/* Seed song warnings (zero similar tracks / possible typo) */}
-        {playlistWarnings.length > 0 && playlistWarnings.map((w, i) => (
-          <div key={i} className="mt-4 mx-2 flex items-start gap-2 rounded-lg border border-orange-600/40 bg-orange-900/20 px-4 py-3 text-sm text-orange-300">
-            <span className="mt-0.5 text-base leading-none flex-shrink-0">⚠️</span>
-            <span>{w.message}</span>
-          </div>
-        ))}
+        {playlistWarnings.length > 0 && playlistWarnings.map((w, i) => {
+          const wasAutoFixed = w.message.startsWith('We used');
+          return (
+            <div key={i} className={`mt-4 mx-2 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
+              wasAutoFixed
+                ? 'border-blue-600/40 bg-blue-900/20 text-blue-300'
+                : 'border-orange-600/40 bg-orange-900/20 text-orange-300'
+            }`}>
+              <span className="mt-0.5 text-base leading-none flex-shrink-0">{wasAutoFixed ? 'ℹ️' : '⚠️'}</span>
+              <span>{w.message}</span>
+            </div>
+          );
+        })}
 
         {/* Short playlist hint */}
         {playlistTracks.length < 20 && (

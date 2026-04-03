@@ -146,7 +146,11 @@ export function parseContextToTags(context: string): string[] {
   return [...new Set(tags)];
 }
 
-/** Search Last.fm for a track and return the top result (or null). */
+/**
+ * Search Last.fm for the most popular song matching a title.
+ * Deliberately omits the artist filter so misspelled artist names don't block results
+ * (e.g. "These Eyes" by "The Who" → finds "These Eyes" by "The Guess Who").
+ */
 async function searchTrackCorrection(
   title: string,
   artist: string
@@ -155,15 +159,15 @@ async function searchTrackCorrection(
     const data = await apiCall({
       method: 'track.search',
       track: title,
-      artist: artist,
       limit: '3',
+      // No artist filter — allows finding the correct artist when name is misspelled
     });
     const results: any[] = data?.results?.trackmatches?.track || [];
     if (results.length === 0) return null;
     const top = results[0];
     const foundTitle = top.name as string;
     const foundArtist = top.artist as string;
-    // Only suggest if the result is meaningfully different from the input
+    // Only return a correction if something is actually different
     const sameTitle = foundTitle.toLowerCase() === title.toLowerCase();
     const sameArtist = foundArtist.toLowerCase() === artist.toLowerCase();
     if (sameTitle && sameArtist) return null;
@@ -202,19 +206,69 @@ export async function generateLastFmPlaylist(
         console.log(`[Last.fm] Similar tracks for "${suggestion.title}" by ${suggestion.artist}: ${tracks.length}`);
 
         if (tracks.length === 0) {
-          // Search for a close match to help the user correct their input
+          // Try to find and USE the correct song automatically
           const correction = await searchTrackCorrection(suggestion.title, suggestion.artist);
-          const warning: typeof warnings[0] = {
-            inputTitle: suggestion.title,
-            inputArtist: suggestion.artist,
-            message: `No similar songs found for "${suggestion.title}" by ${suggestion.artist}.`,
-            suggestion: correction ?? undefined,
-          };
+
           if (correction) {
-            warning.message += ` Did you mean "${correction.title}" by ${correction.artist}?`;
-            console.log(`[Last.fm] Suggested correction: "${correction.title}" by ${correction.artist}`);
+            console.log(`[Last.fm] Auto-correction found: "${correction.title}" by ${correction.artist}`);
+            // Fetch similar tracks for the corrected song and add them to the pool
+            try {
+              const corrData = await apiCall({
+                method: 'track.getSimilar',
+                artist: correction.artist,
+                track: correction.title,
+                limit: '100',
+                autocorrect: '1',
+              });
+              const corrTracks: any[] = corrData?.similartracks?.track || [];
+              console.log(`[Last.fm] Similar tracks for corrected song "${correction.title}" by ${correction.artist}: ${corrTracks.length}`);
+
+              if (corrTracks.length > 0) {
+                for (const t of corrTracks) {
+                  const artistName = typeof t.artist === 'string' ? t.artist : t.artist?.name || '';
+                  const key = `${artistName.toLowerCase()}|||${t.name.toLowerCase()}`;
+                  const matchScore = parseFloat(t.match) || 0;
+                  if (!candidateMap.has(key)) {
+                    candidateMap.set(key, {
+                      title: t.name, artist: artistName,
+                      duration: typeof t.duration === 'number' ? t.duration : 0,
+                      url: t.url || '', matchScore, tagScore: 0, decadeTagScore: 0, nationalityTagScore: 0,
+                    });
+                  } else {
+                    const existing = candidateMap.get(key)!;
+                    existing.matchScore = Math.min(existing.matchScore + matchScore + 0.3, 2.0);
+                  }
+                }
+                warnings.push({
+                  inputTitle: suggestion.title,
+                  inputArtist: suggestion.artist,
+                  message: `We used "${correction.title}" by ${correction.artist} instead of "${suggestion.title}" by ${suggestion.artist}.`,
+                  suggestion: correction,
+                });
+              } else {
+                // Corrected song also has no similar tracks — warn but suggest
+                warnings.push({
+                  inputTitle: suggestion.title,
+                  inputArtist: suggestion.artist,
+                  message: `No similar songs found for "${suggestion.title}" by ${suggestion.artist}. Did you mean "${correction.title}" by ${correction.artist}?`,
+                  suggestion: correction,
+                });
+              }
+            } catch {
+              warnings.push({
+                inputTitle: suggestion.title,
+                inputArtist: suggestion.artist,
+                message: `No similar songs found for "${suggestion.title}" by ${suggestion.artist}. Did you mean "${correction.title}" by ${correction.artist}?`,
+                suggestion: correction,
+              });
+            }
+          } else {
+            warnings.push({
+              inputTitle: suggestion.title,
+              inputArtist: suggestion.artist,
+              message: `No similar songs found for "${suggestion.title}" by ${suggestion.artist}.`,
+            });
           }
-          warnings.push(warning);
           return;
         }
 
