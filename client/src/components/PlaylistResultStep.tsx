@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { usePlaylist } from "@/context/PlaylistContext";
 import { Button } from "@/components/ui/button";
 import { formatDuration, calculateTotalDuration } from "@/lib/utils";
-import { Download, Share, Music } from "lucide-react";
+import { Download, Share, Loader2 } from "lucide-react";
 import SpotifyLogo from "./SpotifyLogo";
 import { useToast } from "@/hooks/use-toast";
 
@@ -38,29 +39,83 @@ export default function PlaylistResultStep() {
     });
   };
   
-  const exportToSpotify = () => {
-    // Format the playlist for Spotify search with direct search links
-    // This creates a list of songs with Spotify search links that users can click on directly
-    const spotifySearchFormat = playlistTracks.map(track => {
-      // Format: Song Title - Artist (Spotify search link)
-      const searchQuery = encodeURIComponent(`${track.title} ${track.artist}`);
-      const spotifySearchUrl = `https://open.spotify.com/search/${searchQuery}`;
-      return `${track.title} - ${track.artist} (${spotifySearchUrl})`;
-    }).join('\n\n');
-    
-    // Add header with instructions
-    const fullExport = `${playlistName}\n` +
-      "Click on the links below to search for each song on Spotify:\n\n" + 
-      spotifySearchFormat;
-    
-    // Copy to clipboard
-    navigator.clipboard.writeText(fullExport);
-    
-    // Show toast notification
-    toast({
-      title: "Spotify export ready",
-      description: "Playlist with Spotify search links copied to clipboard. Paste in a document and click the links to find songs."
-    });
+  const [isExporting, setIsExporting] = useState(false);
+
+  const exportToSpotify = async () => {
+    setIsExporting(true);
+    try {
+      // Ask the server to initiate OAuth and return the Spotify auth URL
+      const res = await fetch('/api/spotify/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playlistName,
+          tracks: playlistTracks.map(t => ({ title: t.title, artist: t.artist })),
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || 'Failed to start Spotify export');
+      }
+
+      const { authUrl } = await res.json();
+
+      // Open Spotify OAuth in a popup window
+      const width = 500, height = 700;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      const popup = window.open(
+        authUrl,
+        'spotify-auth',
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
+
+      if (!popup) {
+        throw new Error('Popup was blocked. Please allow popups for this site and try again.');
+      }
+
+      // Listen for the result message from the popup
+      const handleMessage = (event: MessageEvent) => {
+        if (typeof event.data !== 'object' || event.data === null) return;
+        const data = event.data;
+        window.removeEventListener('message', handleMessage);
+        setIsExporting(false);
+
+        if (data.success) {
+          toast({
+            title: '🎵 Playlist created on Spotify!',
+            description: `${data.tracksAdded} tracks added${data.tracksFailed > 0 ? ` (${data.tracksFailed} not found)` : ''}. Opening playlist...`,
+          });
+          window.open(data.playlistUrl, '_blank');
+        } else {
+          toast({
+            title: 'Spotify export failed',
+            description: data.error || 'Something went wrong. Please try again.',
+            variant: 'destructive',
+          });
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+
+      // Fallback: if popup closes without sending a message
+      const pollClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(pollClosed);
+          window.removeEventListener('message', handleMessage);
+          setIsExporting(false);
+        }
+      }, 500);
+
+    } catch (err: any) {
+      setIsExporting(false);
+      toast({
+        title: 'Export failed',
+        description: err.message || 'Could not export to Spotify.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -150,14 +205,19 @@ export default function PlaylistResultStep() {
             {/* Spotify Export - Featured Button */}
             <Button
               onClick={exportToSpotify}
-              className="w-full px-6 py-3 rounded-full font-medium transition duration-200 flex items-center justify-center h-auto text-white order-first"
+              disabled={isExporting}
+              className="w-full px-6 py-3 rounded-full font-medium transition duration-200 flex items-center justify-center h-auto text-white order-first disabled:opacity-70"
               style={{
                 background: "linear-gradient(45deg, #1DB954, #1ed760)",
                 boxShadow: "0 4px 12px rgba(29, 185, 84, 0.5)"
               }}
             >
-              <SpotifyLogo className="w-5 h-5 mr-2" />
-              Export to Spotify
+              {isExporting ? (
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              ) : (
+                <SpotifyLogo className="w-5 h-5 mr-2" />
+              )}
+              {isExporting ? "Connecting to Spotify…" : "Export to Spotify"}
             </Button>
             
             {/* Download Button */}
