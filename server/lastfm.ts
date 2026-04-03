@@ -32,6 +32,27 @@ export interface LastFmTrackResult {
 const DECADE_TAGS = ['80s', '70s', '90s', '60s', '2000s', '2010s'];
 const NATIONALITY_TAGS = ['canadian', 'british', 'australian', 'american', 'french', 'irish', 'swedish'];
 
+// Extra Last.fm tags that broaden coverage for each decade
+const DECADE_ALIASES: Record<string, string[]> = {
+  '60s': ['1960s', 'sixties'],
+  '70s': ['1970s', 'seventies'],
+  '80s': ['1980s', 'eighties'],
+  '90s': ['1990s', 'nineties'],
+  '2000s': ['00s'],
+  '2010s': ['10s'],
+};
+
+// Genre-specific nationality tags that have much better era coverage than the bare country tag
+const NATIONALITY_GENRE_COMBOS: Record<string, string[]> = {
+  'canadian':   ['cancon', 'canadian rock', 'canadian pop', 'canadian indie', 'canadian folk'],
+  'british':    ['britpop', 'british rock', 'british pop', 'british invasion'],
+  'australian': ['australian rock', 'aussie rock', 'australian pop'],
+  'american':   ['american rock', 'americana', 'american pop'],
+  'french':     ['french pop', 'chanson', 'french rock'],
+  'irish':      ['irish rock', 'irish folk', 'celtic'],
+  'swedish':    ['swedish pop', 'swedish rock'],
+};
+
 /** Fetch duration (seconds) for a single track via track.getInfo. Returns 0 on failure. */
 export async function getTrackDuration(artist: string, title: string): Promise<number> {
   try {
@@ -231,57 +252,53 @@ export async function generateLastFmPlaylist(
     }
   };
 
-  // Fetch decade tag tracks (always adds to pool)
-  for (const decadeTag of decadeTagsInContext) {
+  // Helper: fetch all tracks for a tag (and its aliases) into the pool
+  const fetchTagIntoPool = async (tag: string, isDecade: boolean, isNat: boolean, boost = 0.5) => {
     try {
-      const data = await apiCall({ method: 'tag.getTopTracks', tag: decadeTag, limit: '200' });
+      const data = await apiCall({ method: 'tag.getTopTracks', tag, limit: '200' });
       const tagTracks: any[] = data?.tracks?.track || [];
-      for (const t of tagTracks) addTagTrack(t, 0.5, true, false);
-      console.log(`[Last.fm] Decade tag "${decadeTag}": ${tagTracks.length} tracks added/boosted`);
-    } catch (err) {
-      console.error(`[Last.fm] Failed to get top tracks for decade tag "${decadeTag}":`, err);
+      for (const t of tagTracks) addTagTrack(t, boost, isDecade, isNat);
+      console.log(`[Last.fm] Tag "${tag}" (decade=${isDecade}, nat=${isNat}): ${tagTracks.length} tracks`);
+    } catch {
+      console.warn(`[Last.fm] Tag "${tag}" not found or failed — skipping`);
     }
-  }
+  };
 
-  // Fetch nationality tag tracks (always adds to pool; fetch 2 pages when combined with decade)
-  for (const natTag of nationalityTagsInContext) {
-    const pages = hasBothConstraints ? [1, 2] : [1];
-    for (const page of pages) {
-      try {
-        const data = await apiCall({
-          method: 'tag.getTopTracks', tag: natTag, limit: '200', page: String(page),
-        });
-        const tagTracks: any[] = data?.tracks?.track || [];
-        for (const t of tagTracks) addTagTrack(t, 0.5, false, true);
-        console.log(`[Last.fm] Nationality tag "${natTag}" page ${page}: ${tagTracks.length} tracks added/boosted`);
-      } catch (err) {
-        console.error(`[Last.fm] Failed to get top tracks for nationality tag "${natTag}":`, err);
-      }
-    }
-  }
+  // Fetch decade tags + their aliases in parallel
+  await Promise.all(
+    decadeTagsInContext.flatMap((decadeTag) => [
+      fetchTagIntoPool(decadeTag, true, false, 0.5),
+      ...(DECADE_ALIASES[decadeTag] || []).map((alias) => fetchTagIntoPool(alias, true, false, 0.4)),
+    ])
+  );
+
+  // Fetch nationality tags + genre-specific combo tags in parallel
+  // Use higher boost for combo tags — they have much better era/genre specificity
+  await Promise.all(
+    nationalityTagsInContext.flatMap((natTag) => [
+      fetchTagIntoPool(natTag, false, true, 0.4),
+      ...(NATIONALITY_GENRE_COMBOS[natTag] || []).map((combo) => fetchTagIntoPool(combo, false, true, 0.7)),
+    ])
+  );
 
   // Apply filtering based on which constraints are present
   if (hasBothConstraints) {
-    // Union approach: remove tracks confirmed by neither list, then super-boost intersection
+    // Decade = hard filter: remove tracks not confirmed by any decade tag/alias
     let removed = 0;
     for (const key of candidateMap.keys()) {
-      if (!decadeKeySet.has(key) && !nationalityKeySet.has(key)) {
-        candidateMap.delete(key);
-        removed++;
-      }
+      if (!decadeKeySet.has(key)) { candidateMap.delete(key); removed++; }
     }
-    // Strong bonus for tracks confirmed by BOTH constraints — they rank highest
-    let both = 0;
+    console.log(`[Last.fm] Decade hard-filter removed ${removed}. Remaining: ${candidateMap.size}`);
+
+    // Within the decade pool: strongly boost tracks also confirmed by nationality
+    let natConfirmed = 0;
     for (const [key, track] of candidateMap.entries()) {
-      if (decadeKeySet.has(key) && nationalityKeySet.has(key)) {
-        track.tagScore += 2.0;
-        both++;
+      if (nationalityKeySet.has(key)) {
+        track.tagScore += 2.0; // rises to top
+        natConfirmed++;
       }
     }
-    console.log(
-      `[Last.fm] Both-constraint filter: removed ${removed} untagged, ` +
-      `${both} tracks confirmed by BOTH (decade+nationality), pool: ${candidateMap.size}`
-    );
+    console.log(`[Last.fm] ${natConfirmed} of ${candidateMap.size} decade tracks also confirmed as nationality`);
   } else if (decadeTagsInContext.length > 0) {
     // Decade only: hard filter
     let removed = 0;
@@ -290,7 +307,7 @@ export async function generateLastFmPlaylist(
     }
     console.log(`[Last.fm] Decade hard-filter removed ${removed}. Remaining: ${candidateMap.size}`);
   } else if (nationalityTagsInContext.length > 0) {
-    // Nationality only: hard filter if we have enough tracks
+    // Nationality only: hard filter if enough tracks
     const natMatched = Array.from(candidateMap.keys()).filter((k) => nationalityKeySet.has(k));
     if (natMatched.length >= 10) {
       let removed = 0;
