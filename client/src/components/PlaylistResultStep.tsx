@@ -287,6 +287,16 @@ export default function PlaylistResultStep() {
             </div>
           ))}
         </div>
+
+        {/* Short playlist hint */}
+        {playlistTracks.length < 20 && (
+          <div className="mt-4 mx-2 flex items-start gap-2 rounded-lg border border-yellow-600/40 bg-yellow-900/20 px-4 py-3 text-sm text-yellow-300">
+            <span className="mt-0.5 text-base leading-none">💡</span>
+            <span>
+              Only {playlistTracks.length} songs matched your criteria. For a longer playlist, try adding more example songs.
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="px-6 pb-6">
