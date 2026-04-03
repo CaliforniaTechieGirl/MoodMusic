@@ -452,7 +452,7 @@ export class MemStorage implements IStorage {
     // Try Last.fm first — this gives real "sounds like" recommendations
     if (process.env.LASTFM_API_KEY) {
       try {
-        const lastFmTracks = await generateLastFmPlaylist(suggestions, context);
+        const { tracks: lastFmTracks, warnings } = await generateLastFmPlaylist(suggestions, context);
 
         if (lastFmTracks.length >= 5) {
           const suggestionDurations = await Promise.all(
@@ -503,6 +503,7 @@ export class MemStorage implements IStorage {
               duration: track.duration,
               url: track.url,
             })),
+            warnings: warnings.length > 0 ? warnings : undefined,
           };
         }
       } catch (err) {

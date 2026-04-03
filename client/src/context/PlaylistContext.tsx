@@ -17,6 +17,13 @@ export type PlaylistTrack = {
   url?: string;
 };
 
+export type PlaylistWarning = {
+  inputTitle: string;
+  inputArtist: string;
+  message: string;
+  suggestion?: { title: string; artist: string };
+};
+
 type PlaylistContextType = {
   currentStep: number;
   setCurrentStep: (step: number) => void;
@@ -31,6 +38,7 @@ type PlaylistContextType = {
   removeTrack: (id: number) => void;
   playlistName: string;
   setPlaylistName: (name: string) => void;
+  playlistWarnings: PlaylistWarning[];
   isGenerating: boolean;
   generatePlaylist: () => Promise<void>;
   startOver: () => void;
@@ -46,6 +54,7 @@ export const PlaylistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   ]);
   const [playlistTracks, setPlaylistTracks] = useState<PlaylistTrack[]>([]);
   const [playlistName, setPlaylistName] = useState<string>('');
+  const [playlistWarnings, setPlaylistWarnings] = useState<PlaylistWarning[]>([]);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
 
   const addSongSuggestion = () => {
@@ -89,6 +98,7 @@ export const PlaylistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const data = await response.json();
       setPlaylistTracks(data.tracks);
       setPlaylistName(data.name || generatePlaylistName(playlistContext));
+      setPlaylistWarnings(data.warnings ?? []);
       setCurrentStep(3);
     } catch (error) {
       console.error("Failed to generate playlist:", error);
@@ -103,6 +113,7 @@ export const PlaylistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSongSuggestions([{ title: '', artist: '' }]);
     setPlaylistTracks([]);
     setPlaylistName('');
+    setPlaylistWarnings([]);
   };
 
   return (
@@ -121,6 +132,7 @@ export const PlaylistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         removeTrack,
         playlistName,
         setPlaylistName,
+        playlistWarnings,
         isGenerating,
         generatePlaylist,
         startOver

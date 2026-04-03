@@ -7,7 +7,7 @@ import { SiSpotify } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 
 export default function PlaylistResultStep() {
-  const { playlistContext, playlistTracks, removeTrack, playlistName, setPlaylistName, startOver } = usePlaylist();
+  const { playlistContext, playlistTracks, removeTrack, playlistName, setPlaylistName, playlistWarnings, startOver } = usePlaylist();
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
   const { toast } = useToast();
@@ -287,6 +287,14 @@ export default function PlaylistResultStep() {
             </div>
           ))}
         </div>
+
+        {/* Seed song warnings (zero similar tracks / possible typo) */}
+        {playlistWarnings.length > 0 && playlistWarnings.map((w, i) => (
+          <div key={i} className="mt-4 mx-2 flex items-start gap-2 rounded-lg border border-orange-600/40 bg-orange-900/20 px-4 py-3 text-sm text-orange-300">
+            <span className="mt-0.5 text-base leading-none flex-shrink-0">⚠️</span>
+            <span>{w.message}</span>
+          </div>
+        ))}
 
         {/* Short playlist hint */}
         {playlistTracks.length < 20 && (

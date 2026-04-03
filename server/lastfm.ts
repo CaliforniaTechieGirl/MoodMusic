@@ -146,14 +146,45 @@ export function parseContextToTags(context: string): string[] {
   return [...new Set(tags)];
 }
 
+/** Search Last.fm for a track and return the top result (or null). */
+async function searchTrackCorrection(
+  title: string,
+  artist: string
+): Promise<{ title: string; artist: string } | null> {
+  try {
+    const data = await apiCall({
+      method: 'track.search',
+      track: title,
+      artist: artist,
+      limit: '3',
+    });
+    const results: any[] = data?.results?.trackmatches?.track || [];
+    if (results.length === 0) return null;
+    const top = results[0];
+    const foundTitle = top.name as string;
+    const foundArtist = top.artist as string;
+    // Only suggest if the result is meaningfully different from the input
+    const sameTitle = foundTitle.toLowerCase() === title.toLowerCase();
+    const sameArtist = foundArtist.toLowerCase() === artist.toLowerCase();
+    if (sameTitle && sameArtist) return null;
+    return { title: foundTitle, artist: foundArtist };
+  } catch {
+    return null;
+  }
+}
+
 export async function generateLastFmPlaylist(
   suggestions: Array<{ title: string; artist: string }>,
   context: string
-): Promise<Array<{ title: string; artist: string; duration: number; url: string }>> {
+): Promise<{
+  tracks: Array<{ title: string; artist: string; duration: number; url: string }>;
+  warnings: Array<{ inputTitle: string; inputArtist: string; message: string; suggestion?: { title: string; artist: string } }>;
+}> {
   const contextTags = parseContextToTags(context);
   console.log(`[Last.fm] Context tags parsed:`, contextTags);
 
   const candidateMap = new Map<string, LastFmTrackResult>();
+  const warnings: Array<{ inputTitle: string; inputArtist: string; message: string; suggestion?: { title: string; artist: string } }> = [];
 
   // Step 1: Get similar tracks for each suggestion
   await Promise.all(
@@ -169,6 +200,23 @@ export async function generateLastFmPlaylist(
 
         const tracks: any[] = data?.similartracks?.track || [];
         console.log(`[Last.fm] Similar tracks for "${suggestion.title}" by ${suggestion.artist}: ${tracks.length}`);
+
+        if (tracks.length === 0) {
+          // Search for a close match to help the user correct their input
+          const correction = await searchTrackCorrection(suggestion.title, suggestion.artist);
+          const warning: typeof warnings[0] = {
+            inputTitle: suggestion.title,
+            inputArtist: suggestion.artist,
+            message: `No similar songs found for "${suggestion.title}" by ${suggestion.artist}.`,
+            suggestion: correction ?? undefined,
+          };
+          if (correction) {
+            warning.message += ` Did you mean "${correction.title}" by ${correction.artist}?`;
+            console.log(`[Last.fm] Suggested correction: "${correction.title}" by ${correction.artist}`);
+          }
+          warnings.push(warning);
+          return;
+        }
 
         for (const track of tracks) {
           const artistName =
@@ -333,7 +381,7 @@ export async function generateLastFmPlaylist(
     url: c.url,
   }));
 
-  return spreadArtists(pool, 20);
+  return { tracks: spreadArtists(pool, 20), warnings };
 }
 
 export function shuffleArray<T>(arr: T[]): T[] {

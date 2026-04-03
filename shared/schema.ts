@@ -64,6 +64,13 @@ export const playlistRequestSchema = z.object({
 
 export type PlaylistRequest = z.infer<typeof playlistRequestSchema>;
 
+export type PlaylistWarning = {
+  inputTitle: string;
+  inputArtist: string;
+  message: string;
+  suggestion?: { title: string; artist: string };
+};
+
 export type PlaylistResponse = {
   name: string;
   tracks: Array<{
@@ -74,4 +81,5 @@ export type PlaylistResponse = {
     duration: number;
     url?: string;
   }>;
+  warnings?: PlaylistWarning[];
 };
