@@ -11,7 +11,7 @@ export default function Home() {
               <Music className="w-6 h-6 text-white" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold mb-2">Custom Playlist Generator</h1>
+          <h1 className="text-3xl font-bold mb-2">MoodMusic Playlist Maker</h1>
           <p className="text-[#B3B3B3]">Create a personalized playlist tailored to your mood and preferences</p>
         </header>
         
