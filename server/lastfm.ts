@@ -221,10 +221,48 @@ export async function generateLastFmPlaylist(
     `[Last.fm] Final pool: ${result.length} tracks (${tagMatched.length} matched context tags)`
   );
 
-  return result.slice(0, 20).map((c) => ({
+  const top20 = result.slice(0, 20).map((c) => ({
     title: c.title,
     artist: c.artist,
     duration: c.duration,
     url: c.url,
   }));
+
+  return spreadArtists(top20);
+}
+
+// Reorder tracks so the same artist never plays back-to-back,
+// unless the playlist is single-artist focused (>70% one artist).
+function spreadArtists<T extends { artist: string }>(tracks: T[]): T[] {
+  if (tracks.length === 0) return tracks;
+
+  // Count artist occurrences
+  const counts = new Map<string, number>();
+  for (const t of tracks) {
+    const a = t.artist.toLowerCase();
+    counts.set(a, (counts.get(a) || 0) + 1);
+  }
+
+  // If one artist dominates (single-artist playlist), leave order as-is
+  const maxCount = Math.max(...counts.values());
+  if (maxCount / tracks.length > 0.7) return tracks;
+
+  // Greedy spread: at each position pick the highest-priority (earliest in array)
+  // track whose artist differs from the previous one added.
+  const remaining = [...tracks];
+  const out: T[] = [];
+
+  while (remaining.length > 0) {
+    const lastArtist = out.length > 0 ? out[out.length - 1].artist.toLowerCase() : null;
+    const idx = remaining.findIndex(t => t.artist.toLowerCase() !== lastArtist);
+
+    if (idx === -1) {
+      // Only same-artist tracks left — just append them
+      out.push(...remaining.splice(0));
+    } else {
+      out.push(...remaining.splice(idx, 1));
+    }
+  }
+
+  return out;
 }
