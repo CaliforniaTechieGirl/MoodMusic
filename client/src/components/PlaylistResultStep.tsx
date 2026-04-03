@@ -272,19 +272,25 @@ export default function PlaylistResultStep() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Spotify Export / Open in Spotify */}
             {spotifyPlaylistUrl ? (
-              <a
-                href={spotifyPlaylistUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full px-6 py-3 rounded-full font-medium transition duration-200 flex items-center justify-center h-auto text-white order-first"
-                style={{
-                  background: "linear-gradient(45deg, #1DB954, #1ed760)",
-                  boxShadow: "0 4px 12px rgba(29, 185, 84, 0.5)"
-                }}
-              >
-                <SiSpotify className="w-5 h-5 mr-2" />
-                Open in Spotify
-              </a>
+              <>
+                <style>{`
+                  @keyframes spotifyGlow {
+                    0%, 100% { box-shadow: 0 4px 12px rgba(29,185,84,0.5); }
+                    50%       { box-shadow: 0 0 28px 8px rgba(29,185,84,0.85); }
+                  }
+                  .spotify-open-btn { animation: spotifyGlow 1.6s ease-in-out infinite; }
+                `}</style>
+                <a
+                  href={spotifyPlaylistUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="spotify-open-btn w-full px-6 py-3 rounded-full font-medium flex items-center justify-center h-auto text-white order-first"
+                  style={{ background: "linear-gradient(45deg, #1DB954, #1ed760)" }}
+                >
+                  <SiSpotify className="w-5 h-5 mr-2" />
+                  Open in Spotify
+                </a>
+              </>
             ) : (
               <Button
                 onClick={exportToSpotify}
