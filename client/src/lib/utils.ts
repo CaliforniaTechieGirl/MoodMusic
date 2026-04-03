@@ -5,11 +5,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// Generate a playlist name from actual keywords in the context
+// Generate a 2–3 word playlist name from keywords in the context
 export function generatePlaylistName(context: string): string {
   const lower = context.toLowerCase();
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
   const decadeMatch = context.match(/\b((?:19|20)?\d0s)\b/i);
+  const decade = decadeMatch ? decadeMatch[1] : null;
 
   const moods = ['mellow', 'upbeat', 'chill', 'energetic', 'dark', 'soft', 'smooth', 'funky',
     'groovy', 'dreamy', 'melancholy', 'nostalgic', 'epic', 'intimate', 'raw', 'intense',
@@ -25,22 +27,41 @@ export function generatePlaylistName(context: string): string {
     'african', 'japanese', 'korean', 'swedish', 'irish', 'scottish', 'italian'];
   const foundNation = nations.find(n => lower.includes(n));
 
-  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  // Build candidate slots — ordered for natural-sounding titles
+  // Mood leads when it's the main descriptor; otherwise decade/nation/genre give specificity
+  const slots: string[] = [];
 
-  const parts: string[] = [];
-  if (foundMood) parts.push(cap(foundMood));
-  if (decadeMatch) parts.push(decadeMatch[1]);
-  if (foundNation) parts.push(cap(foundNation));
-  if (foundGenre) parts.push(cap(foundGenre));
-
-  if (parts.length === 0) {
-    // Fall back to capitalising the first 3 meaningful words
-    const stopwords = new Set(['a', 'an', 'the', 'of', 'in', 'on', 'and', 'or', 'for', 'to', 'with']);
-    const words = context.trim().split(/\s+/).filter(w => !stopwords.has(w.toLowerCase()));
-    return words.slice(0, 3).map(cap).join(' ') || 'Custom Mix';
+  // When we have a decade+nation+genre, those three are the most specific — use them
+  if (decade && foundNation && foundGenre) {
+    return `${decade} ${cap(foundNation)} ${cap(foundGenre)}`;
   }
 
-  return parts.join(' ');
+  // Otherwise build naturally: mood → decade → nation → genre
+  if (foundMood) slots.push(cap(foundMood));
+  if (decade)    slots.push(decade);
+  if (foundNation) slots.push(cap(foundNation));
+  if (foundGenre)  slots.push(cap(foundGenre));
+
+  // Take up to 3 parts
+  const selected = slots.slice(0, 3);
+
+  // Pad to at least 2 words when only one keyword matched
+  if (selected.length === 1) {
+    const moodNouns: Record<string, string> = {
+      chill: 'Vibes', dreamy: 'Sounds', nostalgic: 'Memories',
+      romantic: 'Evening', sad: 'Songs', happy: 'Tunes', relaxing: 'Escape',
+    };
+    const suffix = (foundMood && moodNouns[foundMood]) ?? 'Mix';
+    selected.push(suffix);
+  }
+
+  if (selected.length > 0) return selected.join(' ');
+
+  // Fallback: capitalise first 3 meaningful words of the context
+  const stopwords = new Set(['a', 'an', 'the', 'of', 'in', 'on', 'and', 'or', 'for',
+    'to', 'with', 'some', 'songs', 'music', 'tracks', 'playlist']);
+  const words = context.trim().split(/\s+/).filter(w => !stopwords.has(w.toLowerCase()));
+  return words.slice(0, 3).map(cap).join(' ') || 'Custom Mix';
 }
 
 // Format duration from seconds to MM:SS
